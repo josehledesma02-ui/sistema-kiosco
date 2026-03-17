@@ -167,7 +167,3 @@ else:
                 
         **Si incumplís:** Los precios se actualizarán al valor del día si hubo una suba de precios general.
         """)
-    else:
-        st.success("🎉 ¡Estás al día! No registrás deudas pendientes.")
-except Exception as e:
-    st.error(f"No se pudo cargar el historial: {e}")
