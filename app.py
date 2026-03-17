@@ -14,12 +14,14 @@ if not cookies.ready():
 # 2. CONFIGURACIÓN DE PÁGINA
 st.set_page_config(page_title="Maxi Kiosco Ledesma - Mi Cuenta", page_icon="static/images/favicon.jpg", layout="wide")
 
-# 3. CONEXIÓN A FIREBASE (Adaptada para PC y Nube)
+# 3. CONEXIÓN A FIREBASE (Adaptada para PC y Nube con limpieza de llave)
 if not firebase_admin._apps:
     try:
         if "firebase" in st.secrets:
             # Si estamos en la nube (Streamlit Cloud)
             creds_dict = dict(st.secrets["firebase"])
+            # ESTA LÍNEA ES CLAVE: Limpia los saltos de línea de la llave privada
+            creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
             cred = credentials.Certificate(creds_dict)
         else:
             # Si estamos en tu computadora local
