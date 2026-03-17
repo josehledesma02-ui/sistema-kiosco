@@ -154,7 +154,8 @@ else:
         else:
             st.success("🎉 ¡Estás al día! No registrás deudas pendientes.")
     except Exception as e:
-        st.error(f"No se pudo cargar el historial: {e}")
+        st.error(f"No se pudo cargar el historial: {e}"
+                )
 
     # 7. NOTA LEGAL (Aseguramos que esté al final de todo)
     st.divider()
