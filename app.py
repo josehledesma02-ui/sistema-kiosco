@@ -6,7 +6,7 @@ from datetime import datetime
 import os
 from streamlit_cookies_manager import EncryptedCookieManager
 
-# 1. CONFIGURACIÓN DE COOKIES
+# 1. CONFIGURACIÓN DE COOKIES (Versión 2 para forzar limpieza)
 cookies = EncryptedCookieManager(password="ledesma_kiosco_secure_2026_trinidad")
 if not cookies.ready():
     st.stop()
@@ -32,7 +32,6 @@ db = firestore.client()
 
 # --- 🚀 LIMPIADOR DE EMERGENCIA (CIERRE DE SESIÓN FORZADO) ---
 if st.query_params.get("logout") == "true":
-    # Borramos rastro de la URL y limpiamos todo el estado interno
     st.query_params.clear()
     for key in list(st.session_state.keys()):
         del st.session_state[key]
@@ -48,8 +47,8 @@ if 'autenticado' not in st.session_state:
         'nombre_real': None
     })
     
-    # Solo intentamos auto-login si no hay una orden de logout activa
-    usuario_cookie = cookies.get("usuario_registrado")
+    # Buscamos la nueva versión de la cookie para evitar el bucle anterior
+    usuario_cookie = cookies.get("usuario_registrado_v2")
     if usuario_cookie:
         try:
             doc = db.collection("usuarios").document(usuario_cookie).get()
@@ -74,6 +73,7 @@ if not st.session_state['autenticado']:
             st.image(ruta_logo, use_container_width=True)
     
     st.markdown("<h1 style='text-align: center;'>Acceso al Sistema</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #0055A4;'>Maxi Kiosco Ledesma</h3>", unsafe_allow_html=True)
     
     u_input = st.text_input("Usuario").strip()
     c_input = st.text_input("Contraseña / DNI", type="password").strip()
@@ -94,7 +94,7 @@ if not st.session_state['autenticado']:
                             'nombre_real': datos.get('nombre')
                         })
                         if mantener_sesion:
-                            cookies["usuario_registrado"] = u_input
+                            cookies["usuario_registrado_v2"] = u_input
                             cookies.save()
                         st.rerun()
                     else:
@@ -113,20 +113,17 @@ else:
     negocio = st.session_state['id_negocio']
     nombre_pantalla = st.session_state['nombre_real'] if st.session_state['nombre_real'] else user
 
-    # BARRA LATERAL CON CIERRE DE SESIÓN DE ALTO PODER
+    # BARRA LATERAL
     st.sidebar.image("static/images/logo_principal.png", width=100)
     st.sidebar.write(f"**Hola, {nombre_pantalla}**")
     st.sidebar.write(f"**Rol:** {rol.upper()}")
     
     if st.sidebar.button("🔴 Cerrar Sesión"):
-        # 1. Matamos la cookie
-        if "usuario_registrado" in cookies:
-            cookies.pop("usuario_registrado")
+        if "usuario_registrado_v2" in cookies:
+            cookies.pop("usuario_registrado_v2")
             cookies.save()
-        # 2. Limpiamos el estado de sesión
         for key in list(st.session_state.keys()):
             del st.session_state[key]
-        # 3. Activamos el parámetro de la URL para romper el auto-login
         st.query_params["logout"] = "true"
         st.rerun()
 
@@ -142,7 +139,7 @@ else:
             st.write("Resumen de actividad de todos los kioscos vinculados.")
         with tab2:
             st.subheader("Alta de nuevos negocios y encargados")
-            st.write("Aquí podrás crear los accesos para cada dueño de negocio.")
+            st.write("Módulo de administración de sucursales.")
             
     # ---------------------------------------------------------
     # VISTA 2: EMPLEADO
@@ -166,6 +163,7 @@ else:
         
         st.divider()
 
+        # Lógica de fechas
         try:
             c_doc = db.collection("clientes").document(user).get().to_dict()
             if c_doc:
@@ -186,6 +184,7 @@ else:
 
         st.divider()
 
+        # Detalle de cuenta
         try:
             mov_ref = db.collection("cuentas_corrientes").where("Cliente", "==", user).stream()
             lista_movs = [m.to_dict() for m in mov_ref]
@@ -195,6 +194,7 @@ else:
                 df_mov['Subtotal'] = pd.to_numeric(df_mov['Subtotal'])
                 total_deuda = df_mov['Subtotal'].sum()
                 st.metric("TU SALDO PENDIENTE", f"${total_deuda:,.2f}")
+                
                 columnas = ['Fecha', 'Producto', 'Cantidad', 'Precio_Unitario', 'Subtotal']
                 cols_mostrar = [c for c in columnas if c in df_mov.columns]
                 st.table(df_mov[cols_mostrar])
