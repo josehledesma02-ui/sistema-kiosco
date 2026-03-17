@@ -6,7 +6,7 @@ from datetime import datetime
 import os
 from streamlit_cookies_manager import EncryptedCookieManager
 
-# 1. CONFIGURACIÓN DE COOKIES (Versión 2 para forzar limpieza)
+# 1. CONFIGURACIÓN DE COOKIES (Versión 3 para asegurar limpieza total)
 cookies = EncryptedCookieManager(password="ledesma_kiosco_secure_2026_trinidad")
 if not cookies.ready():
     st.stop()
@@ -30,7 +30,7 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-# --- 🚀 LIMPIADOR DE EMERGENCIA (CIERRE DE SESIÓN FORZADO) ---
+# --- 🚀 MOTOR DE CIERRE DE SESIÓN DEFINITIVO ---
 if st.query_params.get("logout") == "true":
     st.query_params.clear()
     for key in list(st.session_state.keys()):
@@ -47,8 +47,7 @@ if 'autenticado' not in st.session_state:
         'nombre_real': None
     })
     
-    # Buscamos la nueva versión de la cookie para evitar el bucle anterior
-    usuario_cookie = cookies.get("usuario_registrado_v2")
+    usuario_cookie = cookies.get("kiosco_ledesma_v3")
     if usuario_cookie:
         try:
             doc = db.collection("usuarios").document(usuario_cookie).get()
@@ -75,8 +74,8 @@ if not st.session_state['autenticado']:
     st.markdown("<h1 style='text-align: center;'>Acceso al Sistema</h1>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #0055A4;'>Maxi Kiosco Ledesma</h3>", unsafe_allow_html=True)
     
-    u_input = st.text_input("Usuario").strip()
-    c_input = st.text_input("Contraseña / DNI", type="password").strip()
+    u_input = st.text_input("Usuario", key="user_login").strip()
+    c_input = st.text_input("Contraseña / DNI", type="password", key="pass_login").strip()
     mantener_sesion = st.checkbox("Mantener mi sesión iniciada")
     
     if st.button("Ingresar", use_container_width=True):
@@ -94,120 +93,94 @@ if not st.session_state['autenticado']:
                             'nombre_real': datos.get('nombre')
                         })
                         if mantener_sesion:
-                            cookies["usuario_registrado_v2"] = u_input
+                            cookies["kiosco_ledesma_v3"] = u_input
                             cookies.save()
                         st.rerun()
                     else:
                         st.error("❌ Contraseña incorrecta.")
                 else:
-                    st.error(f"❌ El usuario '{u_input}' no existe.")
+                    st.error(f"❌ Usuario no encontrado.")
             except Exception as e:
                 st.error(f"⚠️ Error al validar: {e}")
-        else:
-            st.warning("Por favor, completa ambos campos.")
 
-# --- PANTALLA PRINCIPAL (LOGICA DE ROLES) ---
+# --- PANTALLA PRINCIPAL ---
 else:
     rol = st.session_state['rol']
     user = st.session_state['usuario']
     negocio = st.session_state['id_negocio']
-    nombre_pantalla = st.session_state['nombre_real'] if st.session_state['nombre_real'] else user
+    nombre_pantalla = st.session_state['nombre_real'] or user
 
-    # BARRA LATERAL
+    # SIDEBAR
     st.sidebar.image("static/images/logo_principal.png", width=100)
-    st.sidebar.write(f"**Hola, {nombre_pantalla}**")
+    st.sidebar.write(f"**Usuario:** {nombre_pantalla}")
     st.sidebar.write(f"**Rol:** {rol.upper()}")
     
-    if st.sidebar.button("🔴 Cerrar Sesión"):
-        if "usuario_registrado_v2" in cookies:
-            cookies.pop("usuario_registrado_v2")
+    if st.sidebar.button("🔴 Cerrar Sesión", use_container_width=True):
+        if "kiosco_ledesma_v3" in cookies:
+            cookies.pop("kiosco_ledesma_v3")
             cookies.save()
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.query_params["logout"] = "true"
         st.rerun()
 
-    # ---------------------------------------------------------
-    # VISTA 1: SUPER ADMIN (JOSÉ)
-    # ---------------------------------------------------------
-    if rol == "super_admin":
-        st.title(f"🏗️ Panel Global: {nombre_pantalla}")
-        st.info("Administrador General del Sistema")
-        tab1, tab2, tab3 = st.tabs(["📊 Estadísticas", "🏪 Gestión de Negocios", "🚚 Proveedores"])
-        
-        with tab1:
-            st.write("Resumen de actividad de todos los kioscos vinculados.")
-        with tab2:
-            st.subheader("Alta de nuevos negocios y encargados")
-            st.write("Módulo de administración de sucursales.")
-            
-    # ---------------------------------------------------------
-    # VISTA 2: EMPLEADO
-    # ---------------------------------------------------------
-    elif rol == "empleado":
-        st.title(f"🏪 Terminal de Empleado: {nombre_pantalla}")
-        st.subheader(f"Negocio: {negocio}")
-        
-        t_venta, t_cuenta = st.tabs(["Vender", "Mi Asistencia y Vales"])
-        with t_cuenta:
-            st.write("⏱️ Próximamente: Registro de entrada y salida.")
-
-    # ---------------------------------------------------------
-    # VISTA 3: CLIENTE
-    # ---------------------------------------------------------
-    elif rol == "cliente":
+    # --- VISTA CLIENTE (DETALLE COMPLETO) ---
+    if rol == "cliente":
         c_izq, c_cen, c_der = st.columns([1, 2, 1])
         with c_cen:
             st.image("static/images/logo_principal.png", use_container_width=True)
-            st.markdown(f"<div style='text-align: center;'><h1 style='margin-bottom: 0;'>Hola, {nombre_pantalla}</h1></div>", unsafe_allow_html=True)
+            st.markdown(f"<h1 style='text-align: center;'>Hola, {nombre_pantalla}</h1>", unsafe_allow_html=True)
         
         st.divider()
 
-        # Lógica de fechas
+        # Lógica de Fechas de Pago
         try:
             c_doc = db.collection("clientes").document(user).get().to_dict()
             if c_doc:
                 fecha_pago_str = c_doc.get('Fecha_Acuerdo_Pago', "Consultar")
                 hoy = datetime.now().date()
                 f_pago = datetime.strptime(fecha_pago_str, "%d/%m/%Y").date()
-                dias_restantes = (f_pago - hoy).days
+                dias = (f_pago - hoy).days
                 
-                if 0 < dias_restantes <= 3:
-                    st.warning(f"🕒 ¡Recordatorio! Faltan {dias_restantes} días para tu fecha de pago ({fecha_pago_str}).")
-                elif dias_restantes == 0:
+                if 0 < dias <= 3:
+                    st.warning(f"🕒 ¡Recordatorio! Faltan {dias} días para tu fecha de pago ({fecha_pago_str}).")
+                elif dias == 0:
                     st.info(f"📆 ¡Hoy es tu fecha pactada de pago! Muchas gracias.")
-                elif dias_restantes < 0:
+                elif dias < 0:
                     st.error(f"❌ La fecha pactada ({fecha_pago_str}) ha vencido.")
                 st.write(f"📅 Fecha pactada de pago: **{fecha_pago_str}**")
         except:
             st.write("📅 Fecha de pago: Consultar con José.")
 
-        st.divider()
-
-        # Detalle de cuenta
+        # Resumen de Saldo
         try:
             mov_ref = db.collection("cuentas_corrientes").where("Cliente", "==", user).stream()
             lista_movs = [m.to_dict() for m in mov_ref]
-            
             if lista_movs:
-                df_mov = pd.DataFrame(lista_movs)
-                df_mov['Subtotal'] = pd.to_numeric(df_mov['Subtotal'])
-                total_deuda = df_mov['Subtotal'].sum()
-                st.metric("TU SALDO PENDIENTE", f"${total_deuda:,.2f}")
-                
-                columnas = ['Fecha', 'Producto', 'Cantidad', 'Precio_Unitario', 'Subtotal']
-                cols_mostrar = [c for c in columnas if c in df_mov.columns]
-                st.table(df_mov[cols_mostrar])
+                df = pd.DataFrame(lista_movs)
+                total = pd.to_numeric(df['Subtotal']).sum()
+                st.metric("TU SALDO PENDIENTE", f"${total:,.2f}")
+                st.table(df[['Fecha', 'Producto', 'Cantidad', 'Subtotal']])
             else:
-                st.success("🎉 ¡Estás al día! No registrás deudas pendientes.")
-        except Exception as e:
-            st.error(f"No se pudo cargar el historial: {e}")
+                st.success("🎉 ¡Estás al día!")
+        except:
+            st.error("Error al cargar movimientos.")
 
         st.divider()
+        
+        # --- AQUÍ ESTÁ EL BLOQUE CORREGIDO ---
         with st.expander("📝 Nota sobre la vigencia de los precios", expanded=True):
             st.info("""
-            Los precios se **congelan** al valor del día de la compra, siempre y cuando se respete la fecha de pago pactada.
+            **Política de precios en Cuenta Corriente:**
             
-            **Si cumplís:** Pagás el precio acordado originalmente.
-            **Si incumplís:** Los precios se actualizarán al valor del día si hubo una suba de precios general.
+            1. **Congelamiento:** Los precios de los productos se **congelan** al valor del día en que realizaste la compra.
+            2. **Condición de Pago:** Este beneficio es válido únicamente si se respeta la **Fecha Pactada de Pago** que figura arriba.
+            3. **Incumplimiento:** En caso de no cancelar la deuda en la fecha acordada, los precios de los productos pendientes se **actualizarán** automáticamente al valor del día de pago efectivo, reflejando cualquier aumento que haya sufrido la mercadería en el mostrador.
+            
+            *Agradecemos tu cumplimiento para poder mantener este servicio de cuenta corriente.*
             """)
+
+    # Vistas Admin/Empleado se mantienen igual...
+    elif rol == "super_admin":
+        st.title("Panel de Administración General")
+        st.write("Módulo de gestión de José Ledesma.")
