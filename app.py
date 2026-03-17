@@ -6,13 +6,13 @@ from datetime import datetime
 import os
 from streamlit_cookies_manager import EncryptedCookieManager
 
-# 1. CONFIGURACIÓN DE COOKIES (Versión 3 para asegurar limpieza total)
-cookies = EncryptedCookieManager(password="ledesma_kiosco_secure_2026_trinidad")
+# 1. CONFIGURACIÓN DE COOKIES (Clave única para JHL Gestión)
+cookies = EncryptedCookieManager(password="jhl_gestion_secure_key_2026")
 if not cookies.ready():
     st.stop()
 
-# 2. CONFIGURACIÓN DE PÁGINA
-st.set_page_config(page_title="Sistema Kiosco Ledesma", page_icon="static/images/favicon.jpg", layout="wide")
+# 2. CONFIGURACIÓN DE PÁGINA (Nombre Neutral)
+st.set_page_config(page_title="JHL Gestión", page_icon="📊", layout="wide")
 
 # 3. CONEXIÓN A FIREBASE
 if not firebase_admin._apps:
@@ -30,7 +30,7 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-# --- 🚀 MOTOR DE CIERRE DE SESIÓN DEFINITIVO ---
+# --- 🚀 MOTOR DE CIERRE DE SESIÓN (REFORZADO) ---
 if st.query_params.get("logout") == "true":
     st.query_params.clear()
     for key in list(st.session_state.keys()):
@@ -47,7 +47,7 @@ if 'autenticado' not in st.session_state:
         'nombre_real': None
     })
     
-    usuario_cookie = cookies.get("kiosco_ledesma_v3")
+    usuario_cookie = cookies.get("jhl_session_token")
     if usuario_cookie:
         try:
             doc = db.collection("usuarios").document(usuario_cookie).get()
@@ -63,77 +63,80 @@ if 'autenticado' not in st.session_state:
         except:
             pass
 
+# --- 🎨 FUNCIÓN PARA LOGO DINÁMICO ---
+def mostrar_logo(ancho=200):
+    if not st.session_state['autenticado']:
+        ruta = "static/images/logo_sistema.png" # Logo genérico JHL
+    else:
+        negocio = st.session_state.get('id_negocio', 'sistema')
+        ruta = f"static/images/{negocio}.png" # Logo del negocio específico
+    
+    if os.path.exists(ruta):
+        st.image(ruta, width=ancho)
+    else:
+        st.subheader("JHL Gestión")
+
 # --- PANTALLA DE INGRESO ---
 if not st.session_state['autenticado']:
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        ruta_logo = os.path.join("static", "images", "logo_principal.png")
-        if os.path.exists(ruta_logo):
-            st.image(ruta_logo, use_container_width=True)
-    
-    st.markdown("<h1 style='text-align: center;'>Acceso al Sistema</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center; color: #0055A4;'>Maxi Kiosco Ledesma</h3>", unsafe_allow_html=True)
-    
-    u_input = st.text_input("Usuario", key="user_login").strip()
-    c_input = st.text_input("Contraseña / DNI", type="password", key="pass_login").strip()
-    mantener_sesion = st.checkbox("Mantener mi sesión iniciada")
-    
-    if st.button("Ingresar", use_container_width=True):
-        if u_input and c_input:
-            try:
+    c1, c2, c3 = st.columns([1, 1, 1])
+    with c2:
+        mostrar_logo()
+        st.markdown("<h2 style='text-align: center;'>Acceso al Sistema</h2>", unsafe_allow_html=True)
+        
+        u_input = st.text_input("Usuario", key="u_log").strip()
+        c_input = st.text_input("Contraseña", type="password", key="p_log").strip()
+        recordarme = st.checkbox("Mantener mi sesión iniciada")
+        
+        if st.button("Ingresar", use_container_width=True):
+            if u_input and c_input:
                 user_ref = db.collection("usuarios").document(u_input).get()
                 if user_ref.exists:
-                    datos = user_ref.to_dict()
-                    if str(datos.get('password')) == c_input:
+                    d = user_ref.to_dict()
+                    if str(d.get('password')) == c_input:
                         st.session_state.update({
-                            'autenticado': True, 
-                            'usuario': u_input,
-                            'rol': datos.get('rol'),
-                            'id_negocio': datos.get('id_negocio'),
-                            'nombre_real': datos.get('nombre')
+                            'autenticado': True, 'usuario': u_input,
+                            'rol': d.get('rol'), 'id_negocio': d.get('id_negocio'),
+                            'nombre_real': d.get('nombre')
                         })
-                        if mantener_sesion:
-                            cookies["kiosco_ledesma_v3"] = u_input
+                        if recordarme:
+                            cookies["jhl_session_token"] = u_input
                             cookies.save()
                         st.rerun()
                     else:
-                        st.error("❌ Contraseña incorrecta.")
+                        st.error("Contraseña incorrecta")
                 else:
-                    st.error(f"❌ Usuario no encontrado.")
-            except Exception as e:
-                st.error(f"⚠️ Error al validar: {e}")
+                    st.error("Usuario no encontrado")
 
 # --- PANTALLA PRINCIPAL ---
 else:
     rol = st.session_state['rol']
     user = st.session_state['usuario']
-    negocio = st.session_state['id_negocio']
     nombre_pantalla = st.session_state['nombre_real'] or user
 
-    # SIDEBAR
-    st.sidebar.image("static/images/logo_principal.png", width=100)
-    st.sidebar.write(f"**Usuario:** {nombre_pantalla}")
-    st.sidebar.write(f"**Rol:** {rol.upper()}")
-    
-    if st.sidebar.button("🔴 Cerrar Sesión", use_container_width=True):
-        if "kiosco_ledesma_v3" in cookies:
-            cookies.pop("kiosco_ledesma_v3")
-            cookies.save()
-        for key in list(st.session_state.keys()):
-            del st.session_state[key]
-        st.query_params["logout"] = "true"
-        st.rerun()
+    # SIDEBAR NEUTRAL
+    with st.sidebar:
+        mostrar_logo(ancho=100)
+        st.write(f"👤 **{nombre_pantalla}**")
+        st.write(f"Rol: {rol.upper()}")
+        st.divider()
+        
+        if st.button("🔴 Cerrar Sesión", use_container_width=True):
+            if "jhl_session_token" in cookies:
+                del cookies["jhl_session_token"]
+                cookies.save()
+            st.query_params["logout"] = "true"
+            st.rerun()
 
-    # --- VISTA CLIENTE (DETALLE COMPLETO) ---
+    # --- VISTA CLIENTE ---
     if rol == "cliente":
         c_izq, c_cen, c_der = st.columns([1, 2, 1])
         with c_cen:
-            st.image("static/images/logo_principal.png", use_container_width=True)
+            mostrar_logo(ancho=250)
             st.markdown(f"<h1 style='text-align: center;'>Hola, {nombre_pantalla}</h1>", unsafe_allow_html=True)
         
         st.divider()
 
-        # Lógica de Fechas de Pago
+        # Fechas de Pago
         try:
             c_doc = db.collection("clientes").document(user).get().to_dict()
             if c_doc:
@@ -143,16 +146,16 @@ else:
                 dias = (f_pago - hoy).days
                 
                 if 0 < dias <= 3:
-                    st.warning(f"🕒 ¡Recordatorio! Faltan {dias} días para tu fecha de pago ({fecha_pago_str}).")
+                    st.warning(f"🕒 Faltan {dias} días para tu pago ({fecha_pago_str}).")
                 elif dias == 0:
-                    st.info(f"📆 ¡Hoy es tu fecha pactada de pago! Muchas gracias.")
+                    st.info(f"📆 ¡Hoy es tu fecha pactada de pago!")
                 elif dias < 0:
                     st.error(f"❌ La fecha pactada ({fecha_pago_str}) ha vencido.")
                 st.write(f"📅 Fecha pactada de pago: **{fecha_pago_str}**")
         except:
-            st.write("📅 Fecha de pago: Consultar con José.")
+            st.write("📅 Fecha de pago: Consultar con administración.")
 
-        # Resumen de Saldo
+        # Detalle de Saldo
         try:
             mov_ref = db.collection("cuentas_corrientes").where("Cliente", "==", user).stream()
             lista_movs = [m.to_dict() for m in mov_ref]
@@ -160,15 +163,15 @@ else:
                 df = pd.DataFrame(lista_movs)
                 total = pd.to_numeric(df['Subtotal']).sum()
                 st.metric("TU SALDO PENDIENTE", f"${total:,.2f}")
-                st.table(df[['Fecha', 'Producto', 'Cantidad', 'Subtotal']])
+                st.table(df[['Fecha', 'Producto', 'Subtotal']])
             else:
                 st.success("🎉 ¡Estás al día!")
         except:
-            st.error("Error al cargar movimientos.")
+            st.error("No se pudieron cargar los movimientos.")
 
         st.divider()
-        
-        # --- AQUÍ ESTÁ EL BLOQUE CORREGIDO ---
+
+        # --- NOTA DE VIGENCIA COMPLETA ---
         with st.expander("📝 Nota sobre la vigencia de los precios", expanded=True):
             st.info("""
             **Política de precios en Cuenta Corriente:**
@@ -180,7 +183,8 @@ else:
             *Agradecemos tu cumplimiento para poder mantener este servicio de cuenta corriente.*
             """)
 
-    # Vistas Admin/Empleado se mantienen igual...
+    # --- VISTA ADMIN ---
     elif rol == "super_admin":
-        st.title("Panel de Administración General")
-        st.write("Módulo de gestión de José Ledesma.")
+        st.title("Panel de Administración Central - JHL Gestión")
+        st.write("Bienvenido, José.")
+        # Aquí irán los módulos de carga de usuarios y negocios
