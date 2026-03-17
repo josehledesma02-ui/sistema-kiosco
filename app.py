@@ -43,7 +43,6 @@ if 'autenticado' not in st.session_state:
     usuario_cookie = cookies.get("usuario_registrado")
     if usuario_cookie:
         try:
-            # Ahora buscamos en la nueva colección "usuarios" para la persistencia
             doc = db.collection("usuarios").document(usuario_cookie).get()
             if doc.exists:
                 datos = doc.to_dict()
@@ -68,105 +67,114 @@ if not st.session_state['autenticado']:
     st.markdown("<h1 style='text-align: center;'>Acceso al Sistema</h1>", unsafe_allow_html=True)
     st.markdown("<h3 style='text-align: center; color: #0055A4;'>Maxi Kiosco Ledesma</h3>", unsafe_allow_html=True)
     
-    u = st.text_input("Usuario")
-    c = st.text_input("Contraseña / DNI", type="password")
+    # Aplicamos .strip() para evitar errores por espacios accidentales
+    u_input = st.text_input("Usuario").strip()
+    c_input = st.text_input("Contraseña / DNI", type="password").strip()
     mantener_sesion = st.checkbox("Mantener mi sesión iniciada")
     
     if st.button("Ingresar", use_container_width=True):
-        try:
-            # BUSQUEDA MULTI-ROL en la colección 'usuarios'
-            user_ref = db.collection("usuarios").document(u).get()
-            
-            if user_ref.exists:
-                datos = user_ref.to_dict()
-                if str(datos.get('password')) == c:
-                    st.session_state.update({
-                        'autenticado': True, 
-                        'usuario': u,
-                        'rol': datos.get('rol'),
-                        'id_negocio': datos.get('id_negocio'),
-                        'nombre_real': datos.get('nombre')
-                    })
-                    if mantener_sesion:
-                        cookies["usuario_registrado"] = u
-                        cookies.save()
-                    st.rerun()
+        if u_input and c_input:
+            try:
+                user_ref = db.collection("usuarios").document(u_input).get()
+                if user_ref.exists:
+                    datos = user_ref.to_dict()
+                    if str(datos.get('password')) == c_input:
+                        st.session_state.update({
+                            'autenticado': True, 
+                            'usuario': u_input,
+                            'rol': datos.get('rol'),
+                            'id_negocio': datos.get('id_negocio'),
+                            'nombre_real': datos.get('nombre')
+                        })
+                        if mantener_sesion:
+                            cookies["usuario_registrado"] = u_input
+                            cookies.save()
+                        st.rerun()
+                    else:
+                        st.error("❌ Contraseña incorrecta.")
                 else:
-                    st.error("❌ Contraseña incorrecta.")
-            else:
-                st.error("❌ Usuario no encontrado.")
-        except Exception as e:
-            st.error(f"⚠️ Error al validar: {e}")
+                    st.error(f"❌ El usuario '{u_input}' no existe.")
+            except Exception as e:
+                st.error(f"⚠️ Error al validar: {e}")
+        else:
+            st.warning("Por favor, completa ambos campos.")
 
 # --- PANTALLA PRINCIPAL (LOGICA DE ROLES) ---
 else:
     rol = st.session_state['rol']
     user = st.session_state['usuario']
     negocio = st.session_state['id_negocio']
+    nombre_pantalla = st.session_state['nombre_real'] if st.session_state['nombre_real'] else user
 
-    # BARRA LATERAL
+    # BARRA LATERAL CORREGIDA PARA CIERRE DE SESIÓN SEGURO
     st.sidebar.image("static/images/logo_principal.png", width=100)
-    st.sidebar.write(f"**Usuario:** {user}")
+    st.sidebar.write(f"**Hola, {nombre_pantalla}**")
     st.sidebar.write(f"**Rol:** {rol.upper()}")
     
     if st.sidebar.button("Cerrar Sesión"):
-        cookies.pop("usuario_registrado")
-        cookies.save()
-        st.session_state.clear()
+        # 1. Limpiar Cookie
+        if "usuario_registrado" in cookies:
+            cookies.pop("usuario_registrado")
+            cookies.save()
+        # 2. Limpiar Session State de forma segura
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        # 3. Reiniciar App
         st.rerun()
 
     # ---------------------------------------------------------
     # VISTA 1: SUPER ADMIN (JOSÉ)
     # ---------------------------------------------------------
     if rol == "super_admin":
-        st.title(f"🏗️ Panel Global: {st.session_state['nombre_real']}")
-        st.info("Sos el administrador de toda la plataforma.")
-        tab1, tab2, tab3 = st.tabs(["📊 Estadísticas", "🏪 Negocios", "🚚 Proveedores"])
+        st.title(f"🏗️ Panel Global: {nombre_pantalla}")
+        st.info("Administrador General del Sistema")
+        tab1, tab2, tab3 = st.tabs(["📊 Estadísticas", "🏪 Gestión de Negocios", "🚚 Proveedores"])
         
         with tab1:
-            st.write("Acá verás el resumen de todos los negocios que usen tu app.")
-
+            st.write("Resumen de actividad de todos los kioscos vinculados.")
+        with tab2:
+            st.subheader("Alta de nuevos negocios y encargados")
+            # Próximamente: Formulario de creación
+            
     # ---------------------------------------------------------
     # VISTA 2: EMPLEADO
     # ---------------------------------------------------------
     elif rol == "empleado":
-        st.title(f"🏪 Terminal de Empleado: {st.session_state['nombre_real']}")
+        st.title(f"🏪 Terminal de Empleado: {nombre_pantalla}")
         st.subheader(f"Negocio: {negocio}")
         
         t_venta, t_cuenta = st.tabs(["Vender", "Mi Asistencia y Vales"])
         with t_cuenta:
-            st.write("⏱️ Próximamente: Botones para marcar entrada y salida.")
-            st.write("🛒 Próximamente: Detalle de mercadería retirada.")
+            st.write("⏱️ Próximamente: Registro de entrada y salida.")
+            st.write("🛒 Historial de mercadería retirada.")
 
     # ---------------------------------------------------------
-    # VISTA 3: CLIENTE (TU CÓDIGO ORIGINAL FUSIONADO)
+    # VISTA 3: CLIENTE
     # ---------------------------------------------------------
     elif rol == "cliente":
-        # Encabezado centrado
         c_izq, c_cen, c_der = st.columns([1, 2, 1])
         with c_cen:
             st.image("static/images/logo_principal.png", use_container_width=True)
-            st.markdown(f"<div style='text-align: center;'><h1 style='margin-bottom: 0;'>Hola, {user}</h1></div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align: center;'><h1 style='margin-bottom: 0;'>Hola, {nombre_pantalla}</h1></div>", unsafe_allow_html=True)
         
         st.divider()
 
-        # Lógica de fechas
+        # Lógica de fechas (buscando en colección clientes para datos específicos de pago)
         try:
-            # Nota: Para el cliente, buscamos sus datos de pago en la colección 'clientes'
             c_doc = db.collection("clientes").document(user).get().to_dict()
-            fecha_pago_str = c_doc.get('Fecha_Acuerdo_Pago', "Consultar")
-            
-            hoy = datetime.now().date()
-            f_pago = datetime.strptime(fecha_pago_str, "%d/%m/%Y").date()
-            dias_restantes = (f_pago - hoy).days
-            
-            if 0 < dias_restantes <= 3:
-                st.warning(f"🕒 ¡Recordatorio! Faltan {dias_restantes} días para tu fecha de pago ({fecha_pago_str}).")
-            elif dias_restantes == 0:
-                st.info(f"📆 ¡Hoy es tu fecha pactada de pago! Muchas gracias.")
-            elif dias_restantes < 0:
-                st.error(f"❌ La fecha pactada ({fecha_pago_str}) ha vencido.")
-            st.write(f"📅 Fecha pactada de pago: **{fecha_pago_str}**")
+            if c_doc:
+                fecha_pago_str = c_doc.get('Fecha_Acuerdo_Pago', "Consultar")
+                hoy = datetime.now().date()
+                f_pago = datetime.strptime(fecha_pago_str, "%d/%m/%Y").date()
+                dias_restantes = (f_pago - hoy).days
+                
+                if 0 < dias_restantes <= 3:
+                    st.warning(f"🕒 ¡Recordatorio! Faltan {dias_restantes} días para tu fecha de pago ({fecha_pago_str}).")
+                elif dias_restantes == 0:
+                    st.info(f"📆 ¡Hoy es tu fecha pactada de pago! Muchas gracias.")
+                elif dias_restantes < 0:
+                    st.error(f"❌ La fecha pactada ({fecha_pago_str}) ha vencido.")
+                st.write(f"📅 Fecha pactada de pago: **{fecha_pago_str}**")
         except:
             st.write("📅 Fecha de pago: Consultar con José.")
 
@@ -190,7 +198,6 @@ else:
         except Exception as e:
             st.error(f"No se pudo cargar el historial: {e}")
 
-        # Nota Legal
         st.divider()
         with st.expander("📝 Nota sobre la vigencia de los precios", expanded=True):
             st.info("""
