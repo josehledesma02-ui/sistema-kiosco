@@ -34,7 +34,7 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ==========================================
-# 2. MOTOR DE DATOS - LIMPIEZA AMERICANA REAL
+# 2. MOTOR DE DATOS - LIMPIEZA FINAL
 # ==========================================
 if 'autenticado' not in st.session_state:
     st.session_state.update({
@@ -44,51 +44,37 @@ if 'autenticado' not in st.session_state:
     })
 
 def limpiar_precio_final(valor):
-    """
-    Formato Americano: 1,250.50
-    1. Quita el $
-    2. Quita la COMA (,) que es el separador de miles.
-    3. Mantiene el PUNTO (.) que es el decimal.
-    """
+    """ Mantiene el formato americano: Quita comas, deja puntos. """
     if pd.isna(valor) or str(valor).strip() == "": 
         return 0.0
-    
-    # Convertir a texto y limpiar espacios y símbolo peso
     s = str(valor).strip().replace('$', '').replace(' ', '')
-    
     try:
-        # ELIMINAR LA COMA DE MILES (1,250.00 -> 1250.00)
-        s = s.replace(',', '')
-        # Convertir a número (Python entiende el punto como decimal por defecto)
+        s = s.replace(',', '') # Quita separador de miles americano
         return float(s)
     except:
         return 0.0
 
 def cargar_datos_proveedor(silencioso=True):
     try:
-        # header=1 lee desde la Fila 2 (donde están tus títulos)
         df = pd.read_csv(URL_PROVEEDOR_CSV, header=1)
         df.columns = df.columns.astype(str).str.strip()
         
-        # Identificar columnas
         col_prod = [c for c in df.columns if any(kw in c.lower() for kw in ['producto', 'articulo', 'descrip'])]
         col_prec = [c for c in df.columns if any(kw in c.lower() for kw in ['precio', 'venta', 'valor'])]
         
         if col_prod and col_prec:
             df = df.rename(columns={col_prod[0]: 'Productos', col_prec[0]: 'Precio_Raw'})
-            
-            # Aplicar limpieza americana
             df['Precio'] = df['Precio_Raw'].apply(limpiar_precio_final)
             
-            # Eliminar filas basura
+            # FILTRO DE SEGURIDAD: Solo productos con nombre y precio mayor a 0
             df = df.dropna(subset=['Productos'])
-            df = df[df['Productos'] != ""]
+            df = df[(df['Productos'] != "") & (df['Precio'] > 0)]
             
             st.session_state.df_proveedor = df
             if not silencioso:
-                st.toast("✅ Lista sincronizada correctamente", icon="🔄")
+                st.toast("✅ Lista actualizada", icon="🔄")
         else:
-            st.error("⚠️ No se encontraron las columnas en la Fila 2.")
+            st.error("⚠️ No se encontraron las columnas correctas en el Excel.")
     except Exception as e:
         st.error(f"⚠️ Error al leer el Excel: {e}")
 
@@ -115,20 +101,14 @@ def cerrar_sesion():
     st.rerun()
 
 # ==========================================
-# 4. INTERFAZ
+# 4. INTERFAZ (Ventas, Gastos, Historial)
 # ==========================================
-
 if not st.session_state['autenticado']:
     _, col_login, _ = st.columns([1, 1.5, 1])
     with col_login:
-        if os.path.exists(IMG_LOGIN):
-            st.image(IMG_LOGIN, use_container_width=True)
-        else:
-            st.markdown("<h1 style='text-align: center;'>🛍️ JL GESTIÓN</h1>", unsafe_allow_html=True)
-        
+        if os.path.exists(IMG_LOGIN): st.image(IMG_LOGIN, use_container_width=True)
         u_input = st.text_input("Usuario").strip().lower()
         c_input = st.text_input("Contraseña", type="password").strip()
-        
         if st.button("Ingresar", use_container_width=True, type="primary"):
             user_ref = db.collection("usuarios").document(u_input).get()
             if user_ref.exists and str(user_ref.to_dict().get('password')) == c_input:
@@ -140,14 +120,12 @@ if not st.session_state['autenticado']:
                 st.rerun()
             else:
                 st.error("Credenciales incorrectas")
-
 else:
     negocio_id = st.session_state['id_negocio']
     vendedor = st.session_state['nombre_real'] or st.session_state['usuario']
 
     with st.sidebar:
-        if os.path.exists(IMG_SIDEBAR):
-            st.image(IMG_SIDEBAR, width=120)
+        if os.path.exists(IMG_SIDEBAR): st.image(IMG_SIDEBAR, width=120)
         st.write(f"👤 **{vendedor}**")
         if st.button("🔄 Sincronizar Excel"): 
             cargar_datos_proveedor(silencioso=False)
@@ -165,23 +143,27 @@ else:
                 df = st.session_state.df_proveedor
                 res = df[df['Productos'].str.contains(busqueda, case=False, na=False)]
                 if not res.empty:
-                    for _, fila in res.head(10).iterrows():
+                    for _, fila in res.head(8).iterrows():
                         n, p = fila['Productos'], fila['Precio']
-                        if st.button(f"➕ {n} | ${p:,.2f}", key=f"btn_{n}_{p}"):
+                        if st.button(f"➕ {n} | ${p:,.2f}", key=f"btn_{n}"):
                             agregar_al_carrito(n, p)
                             st.toast(f"Añadido: {n}")
             
             st.divider()
             if st.session_state.carrito:
                 for i, it in enumerate(st.session_state.carrito):
-                    c1, c2, c3, c4 = st.columns([3, 1, 1, 0.5])
-                    c1.write(f"**{it['nombre']}**")
-                    it['cantidad'] = c2.number_input("Cant", 1, 500, it['cantidad'], key=f"v_{i}", label_visibility="collapsed")
-                    it['subtotal'] = it['precio'] * it['cantidad']
-                    c3.write(f"${it['subtotal']:,.2f}")
-                    if c4.button("❌", key=f"del_{i}"):
-                        st.session_state.carrito.pop(i)
-                        st.rerun()
+                    with st.container():
+                        c1, c2, c3, c4 = st.columns([3, 1, 1, 0.5])
+                        c1.write(f"**{it['nombre']}**")
+                        nueva_cant = c2.number_input("Cant", 1, 500, it['cantidad'], key=f"v_{i}", label_visibility="collapsed")
+                        if nueva_cant != it['cantidad']:
+                            it['cantidad'] = nueva_cant
+                            it['subtotal'] = it['precio'] * it['cantidad']
+                            st.rerun()
+                        c3.write(f"${it['subtotal']:,.2f}")
+                        if c4.button("❌", key=f"del_{i}"):
+                            st.session_state.carrito.pop(i)
+                            st.rerun()
 
         with col_der:
             total_v = sum(it['subtotal'] for it in st.session_state.carrito)
@@ -198,21 +180,17 @@ else:
                     st.session_state.carrito = []
                     st.rerun()
 
-    # Pestañas de Gastos e Historial simplificadas para asegurar funcionamiento
     with tabs[1]:
-        st.subheader("Gasto de Caja")
+        st.subheader("Registrar Gasto")
         m = st.number_input("Monto $", 0.0)
-        d = st.text_input("Nota")
+        d = st.text_input("Detalle del gasto")
         if st.button("Guardar Gasto"):
-            db.collection("gastos").add({"monto": m, "detalle": d, "fecha": datetime.now(), "id_negocio": negocio_id})
-            st.success("Guardado")
+            db.collection("gastos").add({"monto": m, "detalle": d, "fecha": datetime.now(), "id_negocio": negocio_id, "vendedor": vendedor})
+            st.success("Gasto registrado")
 
     with tabs[2]:
-        st.subheader("Ventas de hoy")
-        try:
-            v_ref = db.collection("ventas_procesadas").where("id_negocio", "==", negocio_id).order_by("fecha", direction=firestore.Query.DESCENDING).limit(10).stream()
-            for v in v_ref:
-                d = v.to_dict()
-                st.write(f"⏱️ {d['fecha'].strftime('%H:%M')} | **${d['total']:,.2f}** | {d['metodo']}")
-        except:
-            st.info("No hay ventas registradas hoy todavía.")
+        st.subheader("Últimos movimientos")
+        v_ref = db.collection("ventas_procesadas").where("id_negocio", "==", negocio_id).order_by("fecha", direction=firestore.Query.DESCENDING).limit(10).stream()
+        for v in v_ref:
+            d = v.to_dict()
+            st.write(f"⏱️ {d['fecha'].strftime('%H:%M')} | **${d['total']:,.2f}** | {d['metodo']}")
