@@ -133,25 +133,38 @@ else:
 
     st.divider()
 
-    # 6. DETALLE DE CUENTA (Sin opción de descarga)
-try:
-    mov_ref = db.collection("cuentas_corrientes").where("Cliente", "==", st.session_state['usuario']).stream()
-    lista_movs = [m.to_dict() for m in mov_ref]
-    
-    if lista_movs:
-        df_mov = pd.DataFrame(lista_movs)
-        df_mov['Subtotal'] = pd.to_numeric(df_mov['Subtotal'])
-        total_deuda = df_mov['Subtotal'].sum()
+    # 6. DETALLE DE CUENTA (Cambiado a st.table para que NO se pueda descargar)
+    try:
+        mov_ref = db.collection("cuentas_corrientes").where("Cliente", "==", st.session_state['usuario']).stream()
+        lista_movs = [m.to_dict() for m in mov_ref]
         
-        st.metric("TU SALDO PENDIENTE", f"${total_deuda:,.2f}")
-        columnas = ['Fecha', 'Producto', 'Cantidad', 'Precio_Unitario', 'Subtotal']
-        cols_mostrar = [c for c in columnas if c in df_mov.columns]
+        if lista_movs:
+            df_mov = pd.DataFrame(lista_movs)
+            df_mov['Subtotal'] = pd.to_numeric(df_mov['Subtotal'])
+            total_deuda = df_mov['Subtotal'].sum()
+            
+            st.metric("TU SALDO PENDIENTE", f"${total_deuda:,.2f}")
+            
+            # Ordenamos las columnas para que se vea prolijo
+            columnas = ['Fecha', 'Producto', 'Cantidad', 'Precio_Unitario', 'Subtotal']
+            cols_mostrar = [c for c in columnas if c in df_mov.columns]
+            
+            # IMPORTANTE: Usamos st.table para eliminar la opción de descarga
+            st.table(df_mov[cols_mostrar])
+        else:
+            st.success("🎉 ¡Estás al día! No registrás deudas pendientes.")
+    except Exception as e:
+        st.error(f"No se pudo cargar el historial: {e}")
 
-        # MODIFICACIÓN AQUÍ: Agregamos la configuración para ocultar herramientas
-        st.dataframe(
-            df_mov[cols_mostrar], 
-            use_container_width=True, 
-            hide_index=True
+    # 7. NOTA LEGAL (Aseguramos que esté al final de todo)
+    st.divider()
+    with st.expander("📝 Nota sobre la vigencia de los precios", expanded=True):
+        st.info("""
+        Los precios se **congelan** al valor del día de la compra, siempre y cuando se respete la fecha de pago pactada.
+        
+        **Si cumplís:** Pagás el precio acordado originalmente.
+        **Si incumplís:** Los precios se actualizarán al valor del día si hubo una suba de precios general.
+        """)
         )
     else:
         st.success("🎉 ¡Estás al día! No registrás deudas pendientes.")
