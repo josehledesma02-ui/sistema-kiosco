@@ -4,17 +4,11 @@ from firebase_admin import credentials, firestore
 import pandas as pd
 from datetime import datetime
 import os
-from streamlit_cookies_manager import EncryptedCookieManager
 
-# 1. CONFIGURACIÓN DE COOKIES (Clave única para JHL Gestión)
-cookies = EncryptedCookieManager(password="jhl_gestion_secure_key_2026")
-if not cookies.ready():
-    st.stop()
-
-# 2. CONFIGURACIÓN DE PÁGINA (Nombre Neutral)
+# 1. CONFIGURACIÓN DE PÁGINA (Marca Neutral)
 st.set_page_config(page_title="JHL Gestión", page_icon="📊", layout="wide")
 
-# 3. CONEXIÓN A FIREBASE
+# 2. CONEXIÓN A FIREBASE
 if not firebase_admin._apps:
     try:
         if "firebase" in st.secrets:
@@ -30,14 +24,7 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-# --- 🚀 MOTOR DE CIERRE DE SESIÓN (REFORZADO) ---
-if st.query_params.get("logout") == "true":
-    st.query_params.clear()
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.rerun()
-
-# 4. LÓGICA DE PERSISTENCIA Y SESIÓN
+# --- 🚀 MOTOR DE SESIÓN (SOLO MEMORIA - SEGURIDAD TOTAL) ---
 if 'autenticado' not in st.session_state:
     st.session_state.update({
         'autenticado': False, 
@@ -46,30 +33,19 @@ if 'autenticado' not in st.session_state:
         'id_negocio': None,
         'nombre_real': None
     })
-    
-    usuario_cookie = cookies.get("jhl_session_token")
-    if usuario_cookie:
-        try:
-            doc = db.collection("usuarios").document(usuario_cookie).get()
-            if doc.exists:
-                datos = doc.to_dict()
-                st.session_state.update({
-                    'autenticado': True, 
-                    'usuario': usuario_cookie,
-                    'rol': datos.get('rol'),
-                    'id_negocio': datos.get('id_negocio'),
-                    'nombre_real': datos.get('nombre')
-                })
-        except:
-            pass
+
+def cerrar_sesion():
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.rerun()
 
 # --- 🎨 FUNCIÓN PARA LOGO DINÁMICO ---
 def mostrar_logo(ancho=200):
     if not st.session_state['autenticado']:
-        ruta = "static/images/logo_sistema.png" # Logo genérico JHL
+        ruta = "static/images/logo_sistema.png" # Logo genérico JHL Gestión
     else:
         negocio = st.session_state.get('id_negocio', 'sistema')
-        ruta = f"static/images/{negocio}.png" # Logo del negocio específico
+        ruta = f"static/images/{negocio}.png" # Logo según el negocio del usuario
     
     if os.path.exists(ruta):
         st.image(ruta, width=ancho)
@@ -85,7 +61,6 @@ if not st.session_state['autenticado']:
         
         u_input = st.text_input("Usuario", key="u_log").strip()
         c_input = st.text_input("Contraseña", type="password", key="p_log").strip()
-        recordarme = st.checkbox("Mantener mi sesión iniciada")
         
         if st.button("Ingresar", use_container_width=True):
             if u_input and c_input:
@@ -94,18 +69,19 @@ if not st.session_state['autenticado']:
                     d = user_ref.to_dict()
                     if str(d.get('password')) == c_input:
                         st.session_state.update({
-                            'autenticado': True, 'usuario': u_input,
-                            'rol': d.get('rol'), 'id_negocio': d.get('id_negocio'),
+                            'autenticado': True, 
+                            'usuario': u_input,
+                            'rol': d.get('rol'), 
+                            'id_negocio': d.get('id_negocio'),
                             'nombre_real': d.get('nombre')
                         })
-                        if recordarme:
-                            cookies["jhl_session_token"] = u_input
-                            cookies.save()
                         st.rerun()
                     else:
-                        st.error("Contraseña incorrecta")
+                        st.error("❌ Contraseña incorrecta")
                 else:
-                    st.error("Usuario no encontrado")
+                    st.error("❌ Usuario no encontrado")
+            else:
+                st.warning("Por favor, completa ambos campos.")
 
 # --- PANTALLA PRINCIPAL ---
 else:
@@ -121,13 +97,9 @@ else:
         st.divider()
         
         if st.button("🔴 Cerrar Sesión", use_container_width=True):
-            if "jhl_session_token" in cookies:
-                del cookies["jhl_session_token"]
-                cookies.save()
-            st.query_params["logout"] = "true"
-            st.rerun()
+            cerrar_sesion()
 
-    # --- VISTA CLIENTE ---
+    # --- 1. VISTA CLIENTE ---
     if rol == "cliente":
         c_izq, c_cen, c_der = st.columns([1, 2, 1])
         with c_cen:
@@ -183,8 +155,24 @@ else:
             *Agradecemos tu cumplimiento para poder mantener este servicio de cuenta corriente.*
             """)
 
-    # --- VISTA ADMIN ---
+    # --- 2. VISTA SUPER ADMIN ---
     elif rol == "super_admin":
         st.title("Panel de Administración Central - JHL Gestión")
-        st.write("Bienvenido, José.")
-        # Aquí irán los módulos de carga de usuarios y negocios
+        st.write(f"Bienvenido, **{nombre_pantalla}**.")
+        
+        tab1, tab2, tab3 = st.tabs(["👥 Usuarios", "🏢 Negocios", "📊 Reportes"])
+        
+        with tab1:
+            st.subheader("Gestión de Usuarios y Empleados")
+            st.info("Aquí podrás crear nuevos accesos para empleados o clientes de cualquier sucursal.")
+            # Próximo paso: Formulario de alta de usuarios
+            
+        with tab2:
+            st.subheader("Configuración de Sucursales")
+            st.write("Administra los ID de negocio y sus logos correspondientes.")
+
+    # --- 3. VISTA EMPLEADO ---
+    elif rol == "empleado":
+        st.title("Terminal de Ventas")
+        st.write(f"Sucursal: {st.session_state.get('id_negocio')}")
+        st.info("Módulo operativo para carga de ventas y cobranzas.")
