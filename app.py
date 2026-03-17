@@ -30,6 +30,14 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
+# --- 🚀 LIMPIADOR DE EMERGENCIA (CIERRE DE SESIÓN FORZADO) ---
+if st.query_params.get("logout") == "true":
+    # Borramos rastro de la URL y limpiamos todo el estado interno
+    st.query_params.clear()
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    st.rerun()
+
 # 4. LÓGICA DE PERSISTENCIA Y SESIÓN
 if 'autenticado' not in st.session_state:
     st.session_state.update({
@@ -40,6 +48,7 @@ if 'autenticado' not in st.session_state:
         'nombre_real': None
     })
     
+    # Solo intentamos auto-login si no hay una orden de logout activa
     usuario_cookie = cookies.get("usuario_registrado")
     if usuario_cookie:
         try:
@@ -65,9 +74,7 @@ if not st.session_state['autenticado']:
             st.image(ruta_logo, use_container_width=True)
     
     st.markdown("<h1 style='text-align: center;'>Acceso al Sistema</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center; color: #0055A4;'>Maxi Kiosco Ledesma</h3>", unsafe_allow_html=True)
     
-    # Aplicamos .strip() para evitar errores por espacios accidentales
     u_input = st.text_input("Usuario").strip()
     c_input = st.text_input("Contraseña / DNI", type="password").strip()
     mantener_sesion = st.checkbox("Mantener mi sesión iniciada")
@@ -106,20 +113,21 @@ else:
     negocio = st.session_state['id_negocio']
     nombre_pantalla = st.session_state['nombre_real'] if st.session_state['nombre_real'] else user
 
-    # BARRA LATERAL CORREGIDA PARA CIERRE DE SESIÓN SEGURO
+    # BARRA LATERAL CON CIERRE DE SESIÓN DE ALTO PODER
     st.sidebar.image("static/images/logo_principal.png", width=100)
     st.sidebar.write(f"**Hola, {nombre_pantalla}**")
     st.sidebar.write(f"**Rol:** {rol.upper()}")
     
-    if st.sidebar.button("Cerrar Sesión"):
-        # 1. Limpiar Cookie
+    if st.sidebar.button("🔴 Cerrar Sesión"):
+        # 1. Matamos la cookie
         if "usuario_registrado" in cookies:
             cookies.pop("usuario_registrado")
             cookies.save()
-        # 2. Limpiar Session State de forma segura
+        # 2. Limpiamos el estado de sesión
         for key in list(st.session_state.keys()):
             del st.session_state[key]
-        # 3. Reiniciar App
+        # 3. Activamos el parámetro de la URL para romper el auto-login
+        st.query_params["logout"] = "true"
         st.rerun()
 
     # ---------------------------------------------------------
@@ -134,7 +142,7 @@ else:
             st.write("Resumen de actividad de todos los kioscos vinculados.")
         with tab2:
             st.subheader("Alta de nuevos negocios y encargados")
-            # Próximamente: Formulario de creación
+            st.write("Aquí podrás crear los accesos para cada dueño de negocio.")
             
     # ---------------------------------------------------------
     # VISTA 2: EMPLEADO
@@ -146,7 +154,6 @@ else:
         t_venta, t_cuenta = st.tabs(["Vender", "Mi Asistencia y Vales"])
         with t_cuenta:
             st.write("⏱️ Próximamente: Registro de entrada y salida.")
-            st.write("🛒 Historial de mercadería retirada.")
 
     # ---------------------------------------------------------
     # VISTA 3: CLIENTE
@@ -159,7 +166,6 @@ else:
         
         st.divider()
 
-        # Lógica de fechas (buscando en colección clientes para datos específicos de pago)
         try:
             c_doc = db.collection("clientes").document(user).get().to_dict()
             if c_doc:
@@ -180,7 +186,6 @@ else:
 
         st.divider()
 
-        # Detalle de cuenta
         try:
             mov_ref = db.collection("cuentas_corrientes").where("Cliente", "==", user).stream()
             lista_movs = [m.to_dict() for m in mov_ref]
