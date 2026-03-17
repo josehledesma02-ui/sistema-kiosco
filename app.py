@@ -7,12 +7,11 @@ from datetime import datetime
 # 1. CONFIGURACIÓN DE PÁGINA
 st.set_page_config(page_title="JL Gestión", page_icon="📊", layout="wide")
 
-# 2. CONFIGURACIÓN DE LOGOS (GitHub)
+# 2. CONFIGURACIÓN DE LOGOS
 USER = "josehledesma02-ui"
 REPO = "sistema-kiosco"
 BRANCH = "main"
 URL_BASE = f"https://raw.githubusercontent.com/{USER}/{REPO}/{BRANCH}/static/images"
-
 LOGO_SISTEMA = f"{URL_BASE}/logo_principal.png"
 LOGO_FABRICON = f"{URL_BASE}/fabricon.png"
 
@@ -34,108 +33,116 @@ db = firestore.client()
 
 # --- 🚀 MOTOR DE SESIÓN ---
 if 'autenticado' not in st.session_state:
-    st.session_state.update({
-        'autenticado': False, 
-        'usuario': None, 
-        'rol': None, 
-        'id_negocio': None,
-        'nombre_real': None
-    })
+    st.session_state.update({'autenticado': False, 'usuario': None, 'rol': None, 'id_negocio': None, 'nombre_real': None})
 
 def cerrar_sesion():
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     st.rerun()
 
-# --- 🎨 FUNCIÓN PARA LOGO DINÁMICO ---
 def mostrar_logo(ancho=250, centrar=False):
     logo_url = LOGO_SISTEMA
     if st.session_state.get('autenticado') and st.session_state.get('id_negocio') == "fabricon":
         logo_url = LOGO_FABRICON
-    
     if centrar:
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.image(logo_url, use_container_width=True)
-    else:
-        st.image(logo_url, width=ancho)
+        col1, col2, col3 = st.columns([1, 2, 1]); with col2: st.image(logo_url, use_container_width=True)
+    else: st.image(logo_url, width=ancho)
 
-# --- PANTALLA DE INGRESO ---
+# --- INGRESO ---
 if not st.session_state['autenticado']:
-    st.write("") 
     c1, c2, c3 = st.columns([1, 2, 1])
-    
     with c2:
         mostrar_logo(centrar=True)
-        st.markdown("<h2 style='text-align: center;'>Acceso JL GESTIÓN</h2>", unsafe_allow_html=True)
-        st.write("") 
-        
-        u_input = st.text_input("Usuario", key="u_log").strip()
-        c_input = st.text_input("Contraseña", type="password", key="p_log").strip()
-        
+        u_input = st.text_input("Usuario").strip().lower()
+        c_input = st.text_input("Contraseña", type="password").strip()
         if st.button("Ingresar", use_container_width=True):
-            if u_input and c_input:
-                user_ref = db.collection("usuarios").document(u_input).get()
-                if user_ref.exists:
-                    d = user_ref.to_dict()
-                    if str(d.get('password')) == c_input:
-                        st.session_state.update({
-                            'autenticado': True, 
-                            'usuario': u_input,
-                            'rol': d.get('rol'), 
-                            'id_negocio': d.get('id_negocio'),
-                            'nombre_real': d.get('nombre')
-                        })
-                        st.rerun()
-                    else:
-                        st.error("❌ Contraseña incorrecta")
-                else:
-                    st.error("❌ Usuario no encontrado")
+            user_ref = db.collection("usuarios").document(u_input).get()
+            if user_ref.exists:
+                d = user_ref.to_dict()
+                if str(d.get('password')) == c_input:
+                    st.session_state.update({'autenticado': True, 'usuario': u_input, 'rol': d.get('rol'), 'id_negocio': d.get('id_negocio'), 'nombre_real': d.get('nombre')})
+                    st.rerun()
+                else: st.error("❌ Contraseña incorrecta")
+            else: st.error("❌ Usuario no encontrado")
 
-# --- PANTALLA PRINCIPAL (LOGUEADO) ---
+# --- PANEL PRINCIPAL ---
 else:
     rol = st.session_state['rol']
     negocio_actual = st.session_state['id_negocio']
     nombre_pantalla = st.session_state['nombre_real'] or st.session_state['usuario']
 
-    # SIDEBAR
     with st.sidebar:
         mostrar_logo(ancho=150)
         st.write(f"👤 **{nombre_pantalla}**")
-        st.write(f"Rol: {rol.upper()}")
-        st.divider()
-        if st.button("🔴 Cerrar Sesión", use_container_width=True):
-            cerrar_sesion()
+        st.caption(f"Rol: {rol.upper()} | Negocio: {negocio_actual}")
+        if st.button("🔴 Cerrar Sesión", use_container_width=True): cerrar_sesion()
 
-    # --- 1. VISTA CLIENTE ---
+    # --- VISTA CLIENTE ---
     if rol == "cliente":
-        c_izq, c_cen, c_der = st.columns([1, 2, 1])
-        with c_cen:
-            mostrar_logo(centrar=True)
-            st.markdown(f"<h1 style='text-align: center;'>Hola, {nombre_pantalla}</h1>", unsafe_allow_html=True)
-        
+        st.markdown(f"<h1 style='text-align: center;'>Hola, {nombre_pantalla}</h1>", unsafe_allow_html=True)
         st.divider()
-        try:
-            user = st.session_state['usuario']
-            c_doc = db.collection("clientes").document(user).get().to_dict()
-            if c_doc:
-                st.write(f"📅 Fecha pactada de pago: **{c_doc.get('Fecha_Acuerdo_Pago', 'Consultar')}**")
-            
-            mov_ref = db.collection("cuentas_corrientes").where("Cliente", "==", user).stream()
-            lista_movs = [m.to_dict() for m in mov_ref]
-            if lista_movs:
-                df = pd.DataFrame(lista_movs)
-                total = pd.to_numeric(df['Subtotal']).sum()
-                st.metric("TU SALDO PENDIENTE", f"${total:,.2f}")
-                st.dataframe(df[['Fecha', 'Producto', 'Subtotal']], use_container_width=True)
-            else:
-                st.success("🎉 ¡No tenés deudas pendientes!")
-        except:
-            st.info("Cargando información de cuenta...")
+        c_doc = db.collection("clientes").document(st.session_state['usuario']).get().to_dict()
+        if c_doc: st.info(f"📅 Fecha pactada de pago: {c_doc.get('Fecha_Acuerdo_Pago', 'A convenir')}")
+        
+        movs = db.collection("cuentas_corrientes").where("Cliente", "==", st.session_state['usuario']).stream()
+        lista = [m.to_dict() for m in movs]
+        if lista:
+            df = pd.DataFrame(lista)
+            st.metric("SALDO PENDIENTE", f"${pd.to_numeric(df['Subtotal']).sum():,.2f}")
+            st.dataframe(df[['Fecha', 'Producto', 'Subtotal']], use_container_width=True)
+        else: st.success("🎉 ¡No tenés deudas pendientes!")
 
-    # --- 2. VISTA SUPER ADMIN ---
+    # --- VISTA EMPLEADO ---
+    elif rol == "empleado":
+        st.title("🛒 Terminal de Ventas")
+        clientes_ref = db.collection("clientes").where("id_negocio", "==", negocio_actual).stream()
+        dict_cl = {c.to_dict()['nombre']: c.id for c in clientes_ref}
+        
+        if dict_cl:
+            with st.form("venta"):
+                cl_sel = st.selectbox("Cliente", list(dict_cl.keys()))
+                prod = st.text_input("Producto")
+                prec = st.number_input("Precio", min_value=0.0)
+                cant = st.number_input("Cantidad", min_value=1, value=1)
+                if st.form_submit_button("Cargar Venta"):
+                    db.collection("cuentas_corrientes").add({
+                        "Cliente": dict_cl[cl_sel], "Nombre_Cliente": cl_sel, "Producto": prod,
+                        "Subtotal": prec * cant, "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), "Negocio": negocio_actual
+                    })
+                    st.success("Venta cargada.")
+        else: st.warning("Cargá clientes primero.")
+
+    # --- VISTA DUEÑO (NEGOCIO) ---
+    elif rol == "negocio":
+        st.title(f"📊 Dashboard: {negocio_actual.upper()}")
+        st.subheader("Resumen General de Cuentas Corrientes")
+        
+        # Obtenemos todos los movimientos de este negocio
+        movs = db.collection("cuentas_corrientes").where("Negocio", "==", negocio_actual).stream()
+        df = pd.DataFrame([m.to_dict() for m in movs])
+        
+        if not df.empty:
+            col1, col2 = st.columns(2)
+            total_deuda = df['Subtotal'].sum()
+            col1.metric("DEUDA TOTAL CLIENTES", f"${total_deuda:,.2f}")
+            col2.metric("CLIENTES ACTIVOS", len(df['Nombre_Cliente'].unique()))
+            
+            st.write("### Detalle por Cliente")
+            resumen_cl = df.groupby('Nombre_Cliente')['Subtotal'].sum().reset_index()
+            st.table(resumen_cl.sort_values(by='Subtotal', ascending=False))
+        else: st.info("Aún no hay movimientos registrados.")
+
+    # --- VISTA PROVEEDOR ---
+    elif rol == "proveedor":
+        st.title("🚚 Panel de Proveedor")
+        st.write(f"Bienvenido, {nombre_pantalla}. Aquí podés ver tus entregas pendientes de cobro.")
+        # Lógica para facturas de proveedores aquí...
+        st.info("Sección en desarrollo: Aquí verás tus remitos y pagos.")
+
+    # --- VISTA SUPER ADMIN ---
     elif rol == "super_admin":
-        st.title("Panel Administrativo")
+        st.title("⚙️ Administración Central")
+        # (Código de alta de usuario que ya tenías)
         tab1, tab2 = st.tabs(["👥 Usuarios", "🏢 Negocios"])
         
         with tab1:
