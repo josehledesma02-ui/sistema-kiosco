@@ -45,41 +45,38 @@ if 'autenticado' not in st.session_state:
         'carrito': [], 'df_proveedor': None
     })
 
-def cargar_datos_proveedor():
+def cargar_datos_proveedor(silencioso=True):
     try:
-        # LEER DESDE LA FILA 2 (header=1 en pandas significa fila 2 del Excel)
+        # header=1 indica que los títulos están en la fila 2 del Excel
         df = pd.read_csv(URL_PROVEEDOR_CSV, header=1)
-        
-        # Limpieza de títulos de columnas
         df.columns = df.columns.astype(str).str.strip()
         
-        # BUSCADOR FLEXIBLE: Busca las columnas sin importar si es A, B, C...
+        # Buscador inteligente de columnas
         col_prod = [c for c in df.columns if any(kw in c.lower() for kw in ['producto', 'articulo', 'descrip'])]
         col_prec = [c for c in df.columns if any(kw in c.lower() for kw in ['precio', 'venta', 'valor'])]
         
         if col_prod and col_prec:
-            # Renombramos internamente para que el sistema no falle
             df = df.rename(columns={col_prod[0]: 'Productos', col_prec[0]: 'Precio'})
             
-            # Limpieza de Precios: Quita $, puntos, comas y espacios
+            # Limpieza de Precios
             df['Precio'] = df['Precio'].astype(str).str.replace(r'[\$\s\.]', '', regex=True).str.replace(',', '.')
             df['Precio'] = pd.to_numeric(df['Precio'], errors='coerce').fillna(0)
             
-            # Quita filas donde no haya nombre de producto
             df = df.dropna(subset=['Productos'])
             st.session_state.df_proveedor = df
-            st.success("✅ Lista de precios vinculada correctamente.")
+            if not silencioso:
+                st.toast("✅ Lista de precios actualizada", icon="🔄")
         else:
-            st.error(f"⚠️ No encontré 'Productos' (A2) o 'Precio' (C2). Columnas detectadas: {list(df.columns)}")
-            
+            st.error("⚠️ No se encontraron las columnas en la Fila 2.")
     except Exception as e:
         st.error(f"⚠️ Error al conectar con Google Sheets: {e}")
 
+# Carga inicial (silenciosa)
 if st.session_state.df_proveedor is None:
-    cargar_datos_proveedor()
+    cargar_datos_proveedor(silencioso=True)
 
 # ==========================================
-# 3. FUNCIONES DE VENTA
+# 3. FUNCIONES DE CARRITO
 # ==========================================
 def agregar_al_carrito(nombre, precio, cantidad):
     for item in st.session_state.carrito:
@@ -107,7 +104,7 @@ if not st.session_state['autenticado']:
         if os.path.exists(IMG_LOGIN):
             st.image(IMG_LOGIN, use_container_width=True)
         else:
-            st.title("🛍️ JL GESTIÓN")
+            st.markdown("<h1 style='text-align: center;'>🛍️ JL GESTIÓN</h1>", unsafe_allow_html=True)
         
         u_input = st.text_input("Usuario").strip().lower()
         c_input = st.text_input("Contraseña", type="password").strip()
@@ -128,34 +125,36 @@ else:
     negocio_id = st.session_state['id_negocio']
     vendedor = st.session_state['nombre_real'] or st.session_state['usuario']
 
+    # SIDEBAR
     with st.sidebar:
         if os.path.exists(IMG_SIDEBAR):
             st.image(IMG_SIDEBAR, width=130)
         st.write(f"👤 **{vendedor}**")
-        if st.button("🔄 Actualizar Lista"): 
-            cargar_datos_proveedor()
-            st.rerun()
+        if st.button("🔄 Sincronizar Lista"): 
+            cargar_datos_proveedor(silencioso=False)
         st.divider()
         if st.button("🔴 Salir", use_container_width=True): cerrar_sesion()
 
     tabs = st.tabs(["🛒 Ventas", "📉 Gastos", "📜 Historial"])
 
-    # --- VENTAS ---
+    # --- PESTAÑA VENTAS ---
     with tabs[0]:
         col_izq, col_der = st.columns([1.6, 1])
 
         with col_izq:
-            busqueda = st.text_input("🔍 Buscar producto...", placeholder="Escribe el nombre...")
+            busqueda = st.text_input("🔍 Buscar producto...", placeholder="Escribe el nombre del producto...")
             
-            if busqueda and st.session_state.df_provider is not None:
+            if busqueda and st.session_state.df_proveedor is not None:
                 df = st.session_state.df_proveedor
                 res = df[df['Productos'].str.contains(busqueda, case=False, na=False)]
                 
                 if not res.empty:
                     for _, fila in res.head(10).iterrows():
-                        if st.button(f"➕ {fila['Productos']} - ${fila['Precio']:,.2f}", key=f"b_{fila['Productos']}"):
-                            agregar_al_carrito(fila['Productos'], fila['Precio'], 1)
-                            st.toast(f"Agregado: {fila['Productos']}")
+                        nom = fila['Productos']
+                        pre = fila['Precio']
+                        if st.button(f"➕ {nom} - ${pre:,.2f}", key=f"btn_{nom}_{pre}"):
+                            agregar_al_carrito(nom, pre, 1)
+                            st.toast(f"Añadido: {nom}")
             
             st.divider()
             if st.session_state.carrito:
@@ -168,12 +167,14 @@ else:
                     if c4.button("❌", key=f"del_{i}"):
                         st.session_state.carrito.pop(i)
                         st.rerun()
+            else:
+                st.info("Buscá un producto arriba para empezar.")
 
         with col_der:
             total_v = sum(it['subtotal'] for it in st.session_state.carrito)
             st.markdown(f"<div style='background:#f0f2f6;padding:20px;border-radius:10px;text-align:center'><p style='margin:0'>TOTAL A COBRAR</p><h1 style='color:#2e7d32;margin:0'>${total_v:,.2f}</h1></div>", unsafe_allow_html=True)
             
-            metodo = st.selectbox("Forma de Pago", ["Efectivo", "Transferencia", "Débito", "Crédito", "Fiado"])
+            metodo = st.selectbox("Forma de Pago", ["Efectivo", "Transferencia", "Débito", "Fiado"])
             
             if st.button("✅ FINALIZAR VENTA", use_container_width=True, type="primary"):
                 if st.session_state.carrito:
@@ -183,23 +184,23 @@ else:
                         "metodo": metodo, "fecha": datetime.now()
                     }
                     db.collection("ventas_procesadas").add(venta)
-                    st.success("Venta guardada")
+                    st.success("¡Venta Guardada!")
                     st.session_state.carrito = []
                     st.rerun()
 
-    # --- PESTAÑAS RESTANTES ---
+    # --- OTRAS PESTAÑAS (SIMPLIFICADAS) ---
     with tabs[1]:
-        st.subheader("Registrar Gasto")
-        with st.form("gasto"):
+        st.subheader("Registrar Salida")
+        with st.form("gastos"):
             m = st.number_input("Monto $", min_value=0.0)
             d = st.text_input("Concepto")
-            if st.form_submit_button("Guardar"):
+            if st.form_submit_button("Guardar Gasto"):
                 db.collection("gastos").add({"monto": m, "detalle": d, "fecha": datetime.now(), "id_negocio": negocio_id})
                 st.success("Registrado")
 
     with tabs[2]:
-        st.subheader("Historial de hoy")
+        st.subheader("Ventas de hoy")
         v_ref = db.collection("ventas_procesadas").where("id_negocio", "==", negocio_id).order_by("fecha", direction=firestore.Query.DESCENDING).limit(10).stream()
         for v in v_ref:
             d = v.to_dict()
-            st.write(f"🕒 {d['fecha'].strftime('%H:%M')} - Total: **${d['total']:,.2f}** ({d['metodo']})")
+            st.write(f"⏱️ {d['fecha'].strftime('%H:%M')} - **${d['total']:,.2f}** ({d['metodo']})")
