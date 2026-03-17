@@ -103,12 +103,10 @@ else:
 
     tabs = st.tabs(["🛒 Ventas", "📉 Gastos", "📜 Historial"])
 
-    # --- TAB VENTAS ---
     with tabs[0]:
         col_izq, col_der = st.columns([1.6, 1])
         
         with col_izq:
-            # 1. BUSCADOR DE PRODUCTOS
             busqueda = st.text_input("🔍 Buscar producto...", placeholder="Nombre del producto...")
             if busqueda and st.session_state.df_proveedor is not None:
                 df = st.session_state.df_proveedor
@@ -117,7 +115,6 @@ else:
                     for _, fila in res.head(8).iterrows():
                         n, p = fila['Productos'], fila['Precio']
                         if st.button(f"➕ {n} | ${p:,.2f}", key=f"btn_{n}"):
-                            # Lógica agregar carrito
                             encontrado = False
                             for item in st.session_state.carrito:
                                 if item['nombre'] == n:
@@ -130,7 +127,6 @@ else:
                             st.toast(f"Añadido: {n}")
 
             st.divider()
-            # 2. LISTA DEL CARRITO
             if st.session_state.carrito:
                 for i, it in enumerate(st.session_state.carrito):
                     c1, c2, c3, c4 = st.columns([3, 1, 1, 0.5])
@@ -146,17 +142,15 @@ else:
                         st.rerun()
 
         with col_der:
-            # 3. DATOS DEL CLIENTE Y PAGO
             st.markdown("### 📋 Datos de la Venta")
             
-            # Buscador/Creador de Clientes
+            # 1. CLIENTE
             clientes_ref = db.collection("clientes").where("id_negocio", "==", negocio_id).stream()
             lista_clientes = ["Consumidor Final"] + [c.to_dict().get('nombre') for c in clientes_ref]
             
             col_c1, col_c2 = st.columns([2, 1])
             cliente_sel = col_c1.selectbox("Cliente", lista_clientes)
-            if col_c2.button("➕ Nuevo"):
-                st.session_state['nuevo_cliente_mode'] = True
+            if col_c2.button("➕ Nuevo"): st.session_state['nuevo_cliente_mode'] = True
 
             if st.session_state.get('nuevo_cliente_mode'):
                 nuevo_n = st.text_input("Nombre del cliente nuevo")
@@ -167,15 +161,32 @@ else:
                         st.success("¡Cliente guardado!")
                         st.rerun()
 
+            # 2. PAGO Y EXTRAS
             pago = st.selectbox("Método de Pago", ["Efectivo", "Transferencia", "Débito", "Crédito", "Fiado"])
-            
-            # Campo extra para transferencia
             cuenta_transf = ""
             if pago == "Transferencia":
-                cuenta_transf = st.text_input("¿A qué cuenta / nombre transfirió?", placeholder="Ej: Mercado Pago Juani")
+                cuenta_transf = st.text_input("¿A qué cuenta transfirió?", placeholder="Ej: MP Juani")
 
-            total_v = sum(it['subtotal'] for it in st.session_state.carrito)
-            st.markdown(f"<div style='background:#f0f2f6;padding:20px;border-radius:10px;text-align:center;border:2px solid #2e7d32'><p style='margin:0; font-weight:bold;'>TOTAL A COBRAR</p><h1 style='color:#2e7d32;margin:0'>${total_v:,.2f}</h1></div>", unsafe_allow_html=True)
+            st.divider()
+            
+            # 3. RECARGOS Y DESCUENTOS
+            col_r, col_d = st.columns(2)
+            porcentaje_recargo = col_r.number_input("Recargo %", min_value=0.0, step=1.0, value=0.0)
+            porcentaje_desc = col_d.number_input("Descuento %", min_value=0.0, step=1.0, value=0.0)
+
+            # CÁLCULOS
+            subtotal_productos = sum(it['subtotal'] for it in st.session_state.carrito)
+            monto_recargo = subtotal_productos * (porcentaje_recargo / 100)
+            monto_desc = subtotal_productos * (porcentaje_desc / 100)
+            total_final = subtotal_productos + monto_recargo - monto_desc
+
+            # Mostrar resumen de cálculos
+            if porcentaje_recargo > 0 or porcentaje_desc > 0:
+                st.write(f"Subtotal: ${subtotal_productos:,.2f}")
+                if porcentaje_recargo > 0: st.write(f"➕ Recargo ({porcentaje_recargo}%): ${monto_recargo:,.2f}")
+                if porcentaje_desc > 0: st.write(f"➖ Descuento ({porcentaje_desc}%): ${monto_desc:,.2f}")
+
+            st.markdown(f"<div style='background:#f0f2f6;padding:20px;border-radius:10px;text-align:center;border:2px solid #2e7d32'><p style='margin:0; font-weight:bold;'>TOTAL FINAL</p><h1 style='color:#2e7d32;margin:0'>${total_final:,.2f}</h1></div>", unsafe_allow_html=True)
             
             if st.button("🚀 REGISTRAR VENTA", use_container_width=True, type="primary"):
                 if st.session_state.carrito:
@@ -185,7 +196,10 @@ else:
                         "id_negocio": negocio_id,
                         "cliente": cliente_sel,
                         "items": st.session_state.carrito,
-                        "total": total_v,
+                        "subtotal": subtotal_productos,
+                        "recargo_porc": porcentaje_recargo,
+                        "descuento_porc": porcentaje_desc,
+                        "total": total_final,
                         "metodo": pago,
                         "detalle_pago": cuenta_transf if pago == "Transferencia" else "",
                         "fecha_completa": ahora,
@@ -193,7 +207,7 @@ else:
                         "hora_str": ahora.strftime("%H:%M:%S")
                     }
                     db.collection("ventas_procesadas").add(venta_data)
-                    st.success(f"Venta registrada a las {venta_data['hora_str']}")
+                    st.success(f"Venta registrada!")
                     st.session_state.carrito = []
                     st.rerun()
                 else:
@@ -201,17 +215,21 @@ else:
 
     # --- TAB HISTORIAL ---
     with tabs[2]:
-        st.subheader("Últimos movimientos detallados")
-        v_ref = db.collection("ventas_procesadas").where("id_negocio", "==", negocio_id).order_by("fecha_completa", direction=firestore.Query.DESCENDING).limit(20).stream()
-        
-        for v in v_ref:
-            d = v.to_dict()
-            with st.expander(f"📅 {d.get('fecha_str')} {d.get('hora_str')} | {d.get('cliente')} | ${d.get('total'):,.2f}"):
-                st.write(f"**Vendedor:** {d.get('vendedor')}")
-                st.write(f"**Pago:** {d.get('metodo')} { '(' + d.get('detalle_pago') + ')' if d.get('detalle_pago') else '' }")
-                st.write("**Productos:**")
-                for item in d.get('items'):
-                    st.write(f"- {item['cantidad']}x {item['nombre']} (${item['subtotal']:,.2f})")
+        st.subheader("Historial de Ventas")
+        try:
+            v_ref = db.collection("ventas_procesadas").where("id_negocio", "==", negocio_id).order_by("fecha_completa", direction=firestore.Query.DESCENDING).limit(20).stream()
+            for v in v_ref:
+                d = v.to_dict()
+                with st.expander(f"📅 {d.get('fecha_str')} {d.get('hora_str')} | {d.get('cliente')} | ${d.get('total'):,.2f}"):
+                    st.write(f"**Vendedor:** {d.get('vendedor')} | **Pago:** {d.get('metodo')}")
+                    if d.get('detalle_pago'): st.info(f"Cuenta: {d.get('detalle_pago')}")
+                    st.write("**Detalle:**")
+                    for item in d.get('items'):
+                        st.write(f"- {item['cantidad']}x {item['nombre']} (${item['subtotal']:,.2f})")
+                    if d.get('recargo_porc') > 0: st.write(f"📈 Recargo: {d.get('recargo_porc')}%")
+                    if d.get('descuento_porc') > 0: st.write(f"📉 Descuento: {d.get('descuento_porc')}%")
+        except:
+            st.info("Asegúrate de haber creado el índice en Firebase para ver el historial.")
 
     # --- TAB GASTOS ---
     with tabs[1]:
@@ -220,8 +238,7 @@ else:
         det = st.text_input("Detalle del gasto")
         if st.button("Guardar Gasto"):
             db.collection("gastos").add({
-                "monto": m, "detalle": det, 
-                "fecha": datetime.now(), "id_negocio": negocio_id, 
-                "vendedor": vendedor
+                "monto": m, "detalle": det, "fecha": datetime.now(), 
+                "id_negocio": negocio_id, "vendedor": vendedor
             })
             st.success("Gasto registrado")
