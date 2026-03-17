@@ -3,19 +3,35 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import pandas as pd
 from datetime import datetime
+import os  # Añadimos esto para que encuentre la ruta de la imagen
 
 # ==========================================
-# 0. CONFIGURACIÓN VISUAL (Nombres fijos)
+# 0. CONFIGURACIÓN DE LOGOS
 # ==========================================
-# Cambiá el nombre de tus fotos en la carpeta a estos dos para que ande perfecto:
+# Asegurate de que tus archivos se llamen exactamente así en la carpeta:
 IMG_LOGIN = "logo.png" 
 IMG_SIDEBAR = "logo_chico.png"
 
 st.set_page_config(page_title="JL Gestión Pro", page_icon="🛍️", layout="wide")
 
+# Función para cargar imagen de forma segura
+def mostrar_imagen(ruta, ancho=None):
+    if os.path.exists(ruta):
+        if ancho:
+            st.image(ruta, width=ancho)
+        else:
+            st.image(ruta, use_container_width=True)
+    else:
+        st.warning(f"⚠️ No se encontró: {ruta}")
+# ==========================================
+# 0. CONFIGURACIÓN VISUAL (Nombres fijos)
+# ==========================================
+
+st.set_page_config(page_title="JL Gestión Pro", page_icon="🛍️", layout="wide")
+
 # CONFIGURACIÓN DEL PROVEEDOR (Google Sheets)
-ID_HOJA = "TU_ID_DE_GOOGLE_SHEETS_AQUI" 
-URL_PROVEEDOR = f"https://docs.google.com/spreadsheets/d/{ID_HOJA}/export?format=csv"
+ID_HOJA = "Lista de Precios" 
+URL_PROVEEDOR = f"https://docs.google.com/spreadsheets/d/1-ay_xIqYItwOaXe80VUsEmh4gsANrk9PH72aZcUD54g/edit?usp=sharing"
 
 # ==========================================
 # 1. CONEXIÓN A FIREBASE
