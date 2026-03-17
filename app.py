@@ -40,13 +40,18 @@ def cerrar_sesion():
         del st.session_state[key]
     st.rerun()
 
+# --- 🎨 FUNCIÓN PARA LOGO DINÁMICO CORREGIDA ---
 def mostrar_logo(ancho=250, centrar=False):
     logo_url = LOGO_SISTEMA
     if st.session_state.get('autenticado') and st.session_state.get('id_negocio') == "fabricon":
         logo_url = LOGO_FABRICON
+    
     if centrar:
-        col1, col2, col3 = st.columns([1, 2, 1]); with col2: st.image(logo_url, use_container_width=True)
-    else: st.image(logo_url, width=ancho)
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2: 
+            st.image(logo_url, use_container_width=True)
+    else:
+        st.image(logo_url, width=ancho)
 
 # --- INGRESO ---
 if not st.session_state['autenticado']:
