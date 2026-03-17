@@ -14,18 +14,18 @@ if not cookies.ready():
 # 2. CONFIGURACIÓN DE PÁGINA
 st.set_page_config(page_title="Maxi Kiosco Ledesma - Mi Cuenta", page_icon="static/images/favicon.jpg", layout="wide")
 
-# 3. CONEXIÓN A GOOGLE SHEETS (MODIFICADO PARA LA NUBE)
+# 3. CONEXIÓN A GOOGLE SHEETS
 try:
     alcance = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     
-    # IMPORTANTE: Aquí lee de la pestaña "Secrets" de Streamlit en lugar de un archivo
+    # Esta línea es la que busca lo que pegaste en el paso anterior
     creds_dict = st.secrets["gcp_service_account"]
     credenciales = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, alcance)
     
     cliente = gspread.authorize(credenciales)
     mi_planilla = cliente.open("Gestion Maxi Kiosco")
 except Exception as e:
-    st.error("⚠️ Error de conexión con la base de datos.")
+    st.error(f"⚠️ Error de conexión: {e}") # Esto nos dirá qué falta exactamente
     st.stop()
 
 # 4. LÓGICA DE PERSISTENCIA
