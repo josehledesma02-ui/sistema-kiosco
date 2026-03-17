@@ -35,7 +35,7 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ==========================================
-# 2. MOTOR DE DATOS Y LIMPIEZA DE PRECIOS
+# 2. MOTOR DE DATOS Y LIMPIEZA FORMATO AMERICANO
 # ==========================================
 if 'autenticado' not in st.session_state:
     st.session_state.update({
@@ -44,35 +44,31 @@ if 'autenticado' not in st.session_state:
         'carrito': [], 'df_proveedor': None
     })
 
-def corregir_precio_extremo(valor):
+def limpiar_precio_americano(valor):
     """
-    Lógica avanzada para evitar que 790 se convierta en 79000.
-    Detecta formatos 790.00 , 790,00 o 790
+    Especial para formato Americano (1,250.50)
+    1. Quita el signo $
+    2. Quita la coma de miles (1,000 -> 1000)
+    3. Mantiene el punto decimal
     """
     if pd.isna(valor) or valor == "": return 0.0
     
-    # Convertir a string y limpiar basura básica
+    # Convertir a string y quitar símbolos
     s = str(valor).strip().replace('$', '').replace(' ', '')
     
     try:
-        # Si el string tiene un punto y luego exactamente dos números (ej: .00)
-        # es muy probable que sean decimales insignificantes que confunden a Python
-        if re.search(r'\.\d{2}$', s):
-            # Lo tratamos como float directo y si da un número gigante, lo dividimos
-            n = float(s)
-            return n if n < 100000 else n / 100
+        # ELIMINAR COMA DE MILES (Formato Americano)
+        # Esto hace que "1,200.50" pase a ser "1200.50"
+        s_limpia = s.replace(',', '')
         
-        # Si tiene coma (formato latino 790,00), la cambiamos por punto
-        if ',' in s:
-            s = s.replace('.', '').replace(',', '.')
-            
-        return float(s)
+        # Convertir a número directamente
+        return float(s_limpia)
     except:
         return 0.0
 
 def cargar_datos_proveedor(silencioso=True):
     try:
-        # header=1 porque tus títulos están en la fila 2 (A2, C2)
+        # header=1 porque tus títulos están en la fila 2
         df = pd.read_csv(URL_PROVEEDOR_CSV, header=1)
         df.columns = df.columns.astype(str).str.strip()
         
@@ -82,18 +78,15 @@ def cargar_datos_proveedor(silencioso=True):
         if col_prod and col_prec:
             df = df.rename(columns={col_prod[0]: 'Productos', col_prec[0]: 'Precio_Raw'})
             
-            # Aplicamos la limpieza "anti-miles"
-            df['Precio'] = df['Precio_Raw'].apply(corregir_precio_extremo)
+            # Usamos la nueva limpieza para formato americano
+            df['Precio'] = df['Precio_Raw'].apply(limpiar_precio_americano)
             
-            # Limpieza final de filas vacías
             df = df.dropna(subset=['Productos'])
-            df = df[df['Productos'] != ""]
-            
             st.session_state.df_proveedor = df
             if not silencioso:
-                st.toast("✅ Lista de precios sincronizada", icon="🔄")
+                st.toast("✅ Lista sincronizada (Formato Americano)", icon="🔄")
         else:
-            st.error("⚠️ No se encontraron las columnas 'Productos' o 'Precio' en la Fila 2.")
+            st.error("⚠️ No detecté las columnas en la Fila 2.")
     except Exception as e:
         st.error(f"⚠️ Error al leer el Excel: {e}")
 
@@ -144,7 +137,7 @@ if not st.session_state['autenticado']:
                 })
                 st.rerun()
             else:
-                st.error("Usuario o clave incorrectos")
+                st.error("Credenciales incorrectas")
 
 else:
     negocio_id = st.session_state['id_negocio']
@@ -162,17 +155,13 @@ else:
 
     tabs = st.tabs(["🛒 Ventas", "📉 Gastos", "📜 Historial"])
 
-    # --- VENTAS ---
     with tabs[0]:
         col_izq, col_der = st.columns([1.6, 1])
-
         with col_izq:
             busqueda = st.text_input("🔍 Buscar...", placeholder="Escribe el producto...")
-            
             if busqueda and st.session_state.df_proveedor is not None:
                 df = st.session_state.df_proveedor
                 res = df[df['Productos'].str.contains(busqueda, case=False, na=False)]
-                
                 if not res.empty:
                     for _, fila in res.head(10).iterrows():
                         n, p = fila['Productos'], fila['Precio']
@@ -195,9 +184,7 @@ else:
         with col_der:
             total_v = sum(it['subtotal'] for it in st.session_state.carrito)
             st.markdown(f"<div style='background:#f9f9f9;padding:20px;border-radius:10px;text-align:center;border:1px solid #ddd'><p style='margin:0'>TOTAL</p><h1 style='color:#2e7d32;margin:0'>${total_v:,.2f}</h1></div>", unsafe_allow_html=True)
-            
             pago = st.selectbox("Método", ["Efectivo", "Transferencia", "Débito", "Fiado"])
-            
             if st.button("✅ REGISTRAR VENTA", use_container_width=True, type="primary"):
                 if st.session_state.carrito:
                     db.collection("ventas_procesadas").add({
@@ -209,7 +196,7 @@ else:
                     st.session_state.carrito = []
                     st.rerun()
 
-    # --- GASTOS E HISTORIAL (BÁSICOS) ---
+    # Gastos e Historial se mantienen igual
     with tabs[1]:
         st.subheader("Gasto de Caja")
         m = st.number_input("Monto $", 0.0)
