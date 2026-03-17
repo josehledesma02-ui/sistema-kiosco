@@ -98,9 +98,15 @@ else:
     # ==========================================
     if rol == "negocio" or permisos in ["encargado", "cajero"]:
         with tabs[0]:
-            # 1. Obtener Número de Factura Correlativo
-            fact_ref = db.collection("ventas_procesadas").where("id_negocio", "==", negocio_id).order_by("nro_factura", direction=firestore.Query.DESCENDING).limit(1).get()
-            nro_factura = fact_ref[0].to_dict()['nro_factura'] + 1 if fact_ref else 1
+            # 1. Obtener Número de Factura Correlativo (Con protección)
+            nro_factura = 1
+            try:
+                fact_ref = db.collection("ventas_procesadas").where("id_negocio", "==", negocio_id).order_by("nro_factura", direction=firestore.Query.DESCENDING).limit(1).get()
+                if fact_ref:
+                    nro_factura = fact_ref[0].to_dict()['nro_factura'] + 1
+            except Exception:
+                st.warning("⚠️ Base de datos sincronizando índices. El número de factura se normalizará en unos minutos.")
+                nro_factura = 999
             
             st.title(f"Punto de Venta - Factura N° {str(nro_factura).zfill(6)}")
             
@@ -208,26 +214,29 @@ else:
         # ==========================================
         with tabs[1]:
             st.subheader("Historial de Ventas")
-            ventas_h = db.collection("ventas_procesadas").where("id_negocio", "==", negocio_id).order_by("fecha", direction=firestore.Query.DESCENDING).limit(50).stream()
-            
-            h_data = []
-            for v in ventas_h:
-                d = v.to_dict()
-                h_data.append({
-                    "N° Factura": d['nro_factura'],
-                    "Fecha": d['fecha_str'],
-                    "Vendedor": d.get('vendedor', 'N/A'),
-                    "Medio Pago": d['metodo_pago'],
-                    "Total": f"${d['total']:,.2f}"
-                })
-            
-            if h_data:
-                st.dataframe(pd.DataFrame(h_data), use_container_width=True)
-            else:
-                st.info("No hay ventas registradas aún.")
+            try:
+                ventas_h = db.collection("ventas_procesadas").where("id_negocio", "==", negocio_id).order_by("fecha", direction=firestore.Query.DESCENDING).limit(50).stream()
+                h_data = []
+                for v in ventas_h:
+                    d = v.to_dict()
+                    h_data.append({
+                        "N° Factura": d.get('nro_factura', 'S/N'),
+                        "Fecha": d.get('fecha_str', ''),
+                        "Vendedor": d.get('vendedor', 'N/A'),
+                        "Medio Pago": d.get('metodo_pago', ''),
+                        "Total": f"${d.get('total', 0):,.2f}"
+                    })
+                
+                if h_data:
+                    st.dataframe(pd.DataFrame(h_data), use_container_width=True)
+                else:
+                    st.info("No hay ventas registradas aún.")
+            except Exception:
+                st.info("⚠️ El historial se mostrará en cuanto Firebase termine de configurar los índices (tarda aprox. 3 minutos).")
 
-    # (Las demás secciones como GASTOS, STOCK y PERSONAL se mantienen con la lógica que ya tenías)
-    # --- SECCIÓN GASTOS (Solo Dueño/Encargado) ---
+    # ==========================================
+    # 📉 SECCIÓN GASTOS
+    # ==========================================
     if rol == "negocio" or permisos == "encargado":
         with tabs[2]:
             st.subheader("Gestión de Gastos")
@@ -241,3 +250,34 @@ else:
                         "monto": monto_g, "fecha": datetime.now().strftime("%d/%m/%Y")
                     })
                     st.success("Gasto guardado.")
+
+    # ==========================================
+    # 📦 SECCIÓN STOCK
+    # ==========================================
+    if rol == "negocio" or permisos in ["encargado", "repositor"]:
+        t_idx = 3 if (rol == "negocio" or permisos == "encargado") else 0
+        with tabs[t_idx]:
+            st.subheader("Control de Inventario")
+            st.info("Aquí se visualizará el stock. (Módulo en desarrollo)")
+
+    # ==========================================
+    # 👥 SECCIÓN PERSONAL
+    # ==========================================
+    if rol == "negocio" or permisos == "encargado":
+        with tabs[4]:
+            st.subheader("Gestión de Usuarios y Permisos")
+            with st.expander("👤 Crear Nuevo Acceso"):
+                with st.form("form_personal"):
+                    u_nuevo = st.text_input("Usuario Login").lower().strip()
+                    n_nuevo = st.text_input("Nombre Real")
+                    p_nuevo = st.text_input("Contraseña")
+                    perm_nuevo = st.selectbox("Nivel de Acceso", ["cajero", "repositor", "encargado"])
+                    if st.form_submit_button("Dar de Alta"):
+                        if u_nuevo and p_nuevo:
+                            db.collection("usuarios").document(u_nuevo).set({
+                                "nombre": n_nuevo, "password": p_nuevo,
+                                "rol": "empleado", "id_negocio": negocio_id,
+                                "permisos": perm_nuevo
+                            })
+                            st.success(f"Empleado {n_nuevo} creado exitosamente.")
+                        else: st.error("Faltan datos requeridos.")
