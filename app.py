@@ -3,13 +3,15 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import pandas as pd
 from datetime import datetime
+import os
 
 # 1. CONFIGURACIÓN DE PÁGINA
 st.set_page_config(page_title="JL Gestión", page_icon="📊", layout="wide")
 
-# 2. CONFIGURACIÓN DE LOGOS (URLS FIJAS PARA EVITAR ERRORES)
-LOGO_SISTEMA = "https://raw.githubusercontent.com/josehledesma02-ui/sistema-kiosco/main/static/images/logo_principal.png"
-LOGO_FABRICON = "https://raw.githubusercontent.com/josehledesma02-ui/sistema-kiosco/main/static/images/fabricon.png"
+# 2. CONFIGURACIÓN DE LOGOS (RUTAS LOCALES)
+# Estas rutas asumen que en tu GitHub tenés una carpeta 'static' y adentro 'images'
+LOGO_SISTEMA = "static/images/logo_principal.png"
+LOGO_FABRICON = "static/images/fabricon.png"
 
 # 3. CONEXIÓN A FIREBASE
 if not firebase_admin._apps:
@@ -42,18 +44,27 @@ def cerrar_sesion():
         del st.session_state[key]
     st.rerun()
 
-# --- 🎨 FUNCIÓN PARA LOGO DINÁMICO ---
+# --- 🎨 FUNCIÓN PARA LOGO DINÁMICO (LOCAL Y SEGURA) ---
 def mostrar_logo(ancho=250, centrar=False):
-    # Determinamos qué logo mostrar basándonos en el id_negocio de la sesión
     negocio = st.session_state.get('id_negocio')
-    url = LOGO_FABRICON if negocio == "fabricon" else LOGO_SISTEMA
+    # Determinar qué archivo buscar
+    ruta = LOGO_FABRICON if negocio == "fabricon" else LOGO_SISTEMA
     
-    if centrar:
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.image(url, use_container_width=True)
+    # Verificar si el archivo existe en la carpeta del proyecto
+    if os.path.exists(ruta):
+        if centrar:
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                st.image(ruta, use_container_width=True)
+        else:
+            st.image(ruta, width=ancho)
     else:
-        st.image(url, width=ancho)
+        # Si el archivo no está, mostramos un título para que no salga el "0"
+        texto_alternativo = "FABRICÓN" if negocio == "fabricon" else "JL GESTIÓN"
+        if centrar:
+            st.markdown(f"<h1 style='text-align: center;'>{texto_alternativo}</h1>", unsafe_allow_html=True)
+        else:
+            st.subheader(texto_alternativo)
 
 # --- 🚪 PANTALLA DE INGRESO ---
 if not st.session_state['autenticado']:
@@ -136,7 +147,7 @@ else:
                         if prod and prec > 0:
                             db.collection("cuentas_corrientes").add({
                                 "Cliente": dict_cl[cl_sel], "Nombre_Cliente": cl_sel, "Producto": prod,
-                                "Subtotal": prec * cant, "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), 
+                                "Subtotal": prec * float(cant), "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), 
                                 "Negocio": negocio_actual
                             })
                             st.success("✅ Cargado correctamente")
