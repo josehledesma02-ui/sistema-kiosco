@@ -353,3 +353,9 @@ with tabs[2]:
         if st.form_submit_button("Registrar Movimiento"):
             # Lógica para guardar en la colección 'gastos' de Firebase
             st.success(f"Registrado: {tipo_gasto} - ${monto}")
+# Ejemplo de lógica para filtrar productos
+def buscar_productos(busqueda):
+    # 'lista_productos' vendría de tu base de datos Firebase
+    if not busqueda:
+        return []
+    return [p for p in lista_productos if busqueda.lower() in p.lower()]
