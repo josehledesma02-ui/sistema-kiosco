@@ -7,13 +7,9 @@ from datetime import datetime
 # 1. CONFIGURACIÓN DE PÁGINA
 st.set_page_config(page_title="JL Gestión", page_icon="📊", layout="wide")
 
-# 2. CONFIGURACIÓN DE LOGOS
-USER = "josehledesma02-ui"
-REPO = "sistema-kiosco"
-BRANCH = "main"
-URL_BASE = f"https://raw.githubusercontent.com/{USER}/{REPO}/{BRANCH}/static/images"
-LOGO_SISTEMA = f"{URL_BASE}/logo_principal.png"
-LOGO_FABRICON = f"{URL_BASE}/fabricon.png"
+# 2. CONFIGURACIÓN DE LOGOS (URLS FIJAS PARA EVITAR ERRORES)
+LOGO_SISTEMA = "https://raw.githubusercontent.com/josehledesma02-ui/sistema-kiosco/main/static/images/logo_principal.png"
+LOGO_FABRICON = "https://raw.githubusercontent.com/josehledesma02-ui/sistema-kiosco/main/static/images/fabricon.png"
 
 # 3. CONEXIÓN A FIREBASE
 if not firebase_admin._apps:
@@ -46,20 +42,18 @@ def cerrar_sesion():
         del st.session_state[key]
     st.rerun()
 
-# --- 🎨 FUNCIÓN PARA LOGO DINÁMICO (CORREGIDA) ---
+# --- 🎨 FUNCIÓN PARA LOGO DINÁMICO ---
 def mostrar_logo(ancho=250, centrar=False):
-    # Si el negocio es fabricon, usamos su logo. Si es cualquier otro o está vacío, el del sistema.
-    if st.session_state.get('id_negocio') == "fabricon":
-        logo_url = LOGO_FABRICON
-    else:
-        logo_url = LOGO_SISTEMA
+    # Determinamos qué logo mostrar basándonos en el id_negocio de la sesión
+    negocio = st.session_state.get('id_negocio')
+    url = LOGO_FABRICON if negocio == "fabricon" else LOGO_SISTEMA
     
     if centrar:
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.image(logo_url, use_container_width=True)
+            st.image(url, use_container_width=True)
     else:
-        st.image(logo_url, width=ancho)
+        st.image(url, width=ancho)
 
 # --- 🚪 PANTALLA DE INGRESO ---
 if not st.session_state['autenticado']:
@@ -85,13 +79,13 @@ if not st.session_state['autenticado']:
                 else: st.error("❌ Contraseña incorrecta")
             else: st.error("❌ Usuario no encontrado")
 
-# --- 🖥️ PANEL PRINCIPAL (POST-LOGIN) ---
+# --- 🖥️ PANEL PRINCIPAL ---
 else:
     rol = st.session_state['rol']
     negocio_actual = st.session_state['id_negocio']
     nombre_pantalla = st.session_state['nombre_real'] or st.session_state['usuario']
 
-    # Barra lateral común
+    # Barra lateral
     with st.sidebar:
         mostrar_logo(ancho=150)
         st.write(f"👤 **{nombre_pantalla}**")
@@ -167,7 +161,6 @@ else:
             c1, c2 = st.columns(2)
             c1.metric("DEUDA TOTAL CLIENTES", f"${df['Subtotal'].sum():,.2f}")
             c2.metric("CLIENTES ACTIVOS", len(df['Nombre_Cliente'].unique()))
-            
             st.write("### Ranking de Deudores")
             resumen = df.groupby('Nombre_Cliente')['Subtotal'].sum().reset_index()
             st.dataframe(resumen.sort_values(by='Subtotal', ascending=False), use_container_width=True)
