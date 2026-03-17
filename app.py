@@ -3,12 +3,17 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import pandas as pd
 from datetime import datetime
-import os
 
-# 1. CONFIGURACIÓN DE PÁGINA (Marca Neutral)
+# 1. CONFIGURACIÓN DE PÁGINA
 st.set_page_config(page_title="JHL Gestión", page_icon="📊", layout="wide")
 
-# 2. CONEXIÓN A FIREBASE
+# 2. CONFIGURACIÓN DE LOGOS DESDE GITHUB
+# Usuario: josehledesma02-ui | Repositorio: sistema-kiosco
+GITHUB_BASE = "https://raw.githubusercontent.com/josehledesma02-ui/sistema-kiosco/main"
+LOGO_SISTEMA = f"{GITHUB_BASE}/logo_principal.png"
+LOGO_FABRICON = f"{GITHUB_BASE}/fabricon.png"
+
+# 3. CONEXIÓN A FIREBASE
 if not firebase_admin._apps:
     try:
         if "firebase" in st.secrets:
@@ -24,7 +29,7 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-# --- 🚀 MOTOR DE SESIÓN (SOLO MEMORIA - SEGURIDAD TOTAL) ---
+# --- 🚀 MOTOR DE SESIÓN ---
 if 'autenticado' not in st.session_state:
     st.session_state.update({
         'autenticado': False, 
@@ -41,23 +46,25 @@ def cerrar_sesion():
 
 # --- 🎨 FUNCIÓN PARA LOGO DINÁMICO ---
 def mostrar_logo(ancho=200):
-    if not st.session_state['autenticado']:
-        ruta = "static/images/logo_sistema.png" # Logo genérico JHL Gestión
-    else:
-        negocio = st.session_state.get('id_negocio', 'sistema')
-        ruta = f"static/images/{negocio}.png" # Logo según el negocio del usuario
-    
-    if os.path.exists(ruta):
-        st.image(ruta, width=ancho)
-    else:
+    # Si el logo no carga (URL rota), Streamlit mostrará un error amigable o nada
+    try:
+        if not st.session_state['autenticado']:
+            st.image(LOGO_SISTEMA, width=ancho)
+        else:
+            negocio = st.session_state.get('id_negocio')
+            if negocio == "fabricon":
+                st.image(LOGO_FABRICON, width=ancho)
+            else:
+                st.image(LOGO_SISTEMA, width=ancho)
+    except:
         st.subheader("JHL Gestión")
 
 # --- PANTALLA DE INGRESO ---
 if not st.session_state['autenticado']:
     c1, c2, c3 = st.columns([1, 1, 1])
     with c2:
-        mostrar_logo()
-        st.markdown("<h2 style='text-align: center;'>Acceso al Sistema</h2>", unsafe_allow_html=True)
+        mostrar_logo(ancho=250)
+        st.markdown("<h4 style='text-align: center;'>Acceso JHL Gestión</h4>", unsafe_allow_html=True)
         
         u_input = st.text_input("Usuario", key="u_log").strip()
         c_input = st.text_input("Contraseña", type="password", key="p_log").strip()
@@ -80,22 +87,18 @@ if not st.session_state['autenticado']:
                         st.error("❌ Contraseña incorrecta")
                 else:
                     st.error("❌ Usuario no encontrado")
-            else:
-                st.warning("Por favor, completa ambos campos.")
 
 # --- PANTALLA PRINCIPAL ---
 else:
     rol = st.session_state['rol']
-    user = st.session_state['usuario']
-    nombre_pantalla = st.session_state['nombre_real'] or user
+    nombre_pantalla = st.session_state['nombre_real'] or st.session_state['usuario']
 
-    # SIDEBAR NEUTRAL
+    # SIDEBAR
     with st.sidebar:
-        mostrar_logo(ancho=100)
+        mostrar_logo(ancho=120)
         st.write(f"👤 **{nombre_pantalla}**")
         st.write(f"Rol: {rol.upper()}")
         st.divider()
-        
         if st.button("🔴 Cerrar Sesión", use_container_width=True):
             cerrar_sesion()
 
@@ -108,27 +111,14 @@ else:
         
         st.divider()
 
-        # Fechas de Pago
+        # Detalle de Saldo y Fechas
         try:
+            user = st.session_state['usuario']
             c_doc = db.collection("clientes").document(user).get().to_dict()
             if c_doc:
                 fecha_pago_str = c_doc.get('Fecha_Acuerdo_Pago', "Consultar")
-                hoy = datetime.now().date()
-                f_pago = datetime.strptime(fecha_pago_str, "%d/%m/%Y").date()
-                dias = (f_pago - hoy).days
-                
-                if 0 < dias <= 3:
-                    st.warning(f"🕒 Faltan {dias} días para tu pago ({fecha_pago_str}).")
-                elif dias == 0:
-                    st.info(f"📆 ¡Hoy es tu fecha pactada de pago!")
-                elif dias < 0:
-                    st.error(f"❌ La fecha pactada ({fecha_pago_str}) ha vencido.")
                 st.write(f"📅 Fecha pactada de pago: **{fecha_pago_str}**")
-        except:
-            st.write("📅 Fecha de pago: Consultar con administración.")
-
-        # Detalle de Saldo
-        try:
+            
             mov_ref = db.collection("cuentas_corrientes").where("Cliente", "==", user).stream()
             lista_movs = [m.to_dict() for m in mov_ref]
             if lista_movs:
@@ -137,42 +127,38 @@ else:
                 st.metric("TU SALDO PENDIENTE", f"${total:,.2f}")
                 st.table(df[['Fecha', 'Producto', 'Subtotal']])
             else:
-                st.success("🎉 ¡Estás al día!")
+                st.success("🎉 ¡No tenés deudas pendientes!")
         except:
-            st.error("No se pudieron cargar los movimientos.")
+            st.info("Cargando información de cuenta...")
 
-        st.divider()
-
-        # --- NOTA DE VIGENCIA COMPLETA ---
         with st.expander("📝 Nota sobre la vigencia de los precios", expanded=True):
             st.info("""
             **Política de precios en Cuenta Corriente:**
-            
-            1. **Congelamiento:** Los precios de los productos se **congelan** al valor del día en que realizaste la compra.
-            2. **Condición de Pago:** Este beneficio es válido únicamente si se respeta la **Fecha Pactada de Pago** que figura arriba.
-            3. **Incumplimiento:** En caso de no cancelar la deuda en la fecha acordada, los precios de los productos pendientes se **actualizarán** automáticamente al valor del día de pago efectivo, reflejando cualquier aumento que haya sufrido la mercadería en el mostrador.
-            
-            *Agradecemos tu cumplimiento para poder mantener este servicio de cuenta corriente.*
+            *   **Precios:** Se congelan al día de la compra.
+            *   **Condición:** Respetar la **Fecha Pactada de Pago**.
+            *   **Incumplimiento:** Los precios se actualizarán al valor del día de pago efectivo.
             """)
 
     # --- 2. VISTA SUPER ADMIN ---
     elif rol == "super_admin":
-        st.title("Panel de Administración Central - JHL Gestión")
-        st.write(f"Bienvenido, **{nombre_pantalla}**.")
-        
-        tab1, tab2, tab3 = st.tabs(["👥 Usuarios", "🏢 Negocios", "📊 Reportes"])
+        st.title("Panel Administrativo")
+        tab1, tab2 = st.tabs(["👥 Usuarios", "🏢 Negocios"])
         
         with tab1:
-            st.subheader("Gestión de Usuarios y Empleados")
-            st.info("Aquí podrás crear nuevos accesos para empleados o clientes de cualquier sucursal.")
-            # Próximo paso: Formulario de alta de usuarios
-            
-        with tab2:
-            st.subheader("Configuración de Sucursales")
-            st.write("Administra los ID de negocio y sus logos correspondientes.")
+            st.subheader("Alta de Usuario")
+            with st.form("crear_usuario"):
+                new_id = st.text_input("Usuario ID (ej: jose01)")
+                new_name = st.text_input("Nombre Completo")
+                new_pass = st.text_input("Contraseña")
+                new_rol = st.selectbox("Rol", ["cliente", "empleado", "super_admin"])
+                new_neg = st.selectbox("Negocio", ["fabricon", "kiosco_trinidad", "otro"])
+                if st.form_submit_button("Crear"):
+                    db.collection("usuarios").document(new_id).set({
+                        "nombre": new_name, "password": new_pass, "rol": new_rol, "id_negocio": new_neg
+                    })
+                    st.success(f"Usuario {new_id} creado con éxito.")
 
     # --- 3. VISTA EMPLEADO ---
     elif rol == "empleado":
         st.title("Terminal de Ventas")
-        st.write(f"Sucursal: {st.session_state.get('id_negocio')}")
-        st.info("Módulo operativo para carga de ventas y cobranzas.")
+        st.write(f"Negocio: **{st.session_state.get('id_negocio').upper()}**")
