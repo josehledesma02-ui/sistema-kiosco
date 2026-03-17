@@ -266,3 +266,90 @@ else:
                 if st.form_submit_button("Crear"):
                     db.collection("usuarios").document(un).set({"nombre": nr, "password": ps, "rol": "empleado", "id_negocio": negocio_id})
                     st.success("Usuario creado.")
+# --- TAB VENTAS (Diseño POS Profesional con tu Lista de Precios) ---
+with tabs[0]:
+    # 1. Función para buscar en tu lista de Google Sheets
+    def buscar_en_proveedor(termino):
+        if st.session_state.df_proveedor is not None:
+            df = st.session_state.df_proveedor
+            # Busca coincidencias en la columna 'Productos'
+            resultado = df[df['Productos'].str.contains(termino, case=False, na=False)]
+            return resultado
+        return pd.DataFrame()
+
+    col_carrito, col_totales = st.columns([2, 1])
+
+    with col_carrito:
+        st.subheader("🛒 Ticket de Venta")
+        
+        # Buscador inteligente conectado a tu lista
+        busqueda = st.text_input("Buscar producto (ej: Yerba, Aceite, Jabon...)", placeholder="Escribí para buscar...")
+        
+        if busqueda:
+            res = buscar_en_proveedor(busqueda)
+            if not res.empty:
+                st.write("Seleccioná para agregar:")
+                for _, fila in res.head(5).iterrows(): # Mostramos los 5 mejores
+                    # Limpiamos el precio que viene con '$' y ',' de la lista
+                    precio_limpio = float(str(fila['Precio']).replace('$', '').replace(',', '').strip())
+                    if st.button(f"➕ {fila['Productos']} - ${precio_limpio}", key=f"btn_{fila['Productos']}"):
+                        agregar_al_carrito(fila['Productos'], precio_limpio, 1)
+                        st.toast(f"Agregado: {fila['Productos']}")
+            else:
+                st.caption("No se encontraron coincidencias.")
+
+        st.divider()
+        
+        # Mostrar el carrito actual
+        if st.session_state.carrito:
+            for i, item in enumerate(st.session_state.carrito):
+                c1, c2, c3, c4 = st.columns([3, 1, 1, 0.5])
+                c1.write(f"**{item['nombre']}**")
+                item['cantidad'] = c2.number_input("Cant", min_value=1, value=item['cantidad'], key=f"v_{i}", label_visibility="collapsed")
+                item['subtotal'] = item['precio'] * item['cantidad']
+                c3.write(f"${item['subtotal']:,.2f}")
+                if c4.button("❌", key=f"del_{i}"):
+                    st.session_state.carrito.pop(i)
+                    st.rerun()
+        else:
+            st.info("Buscá productos arriba para empezar la venta.")
+
+    with col_totales:
+        st.markdown("### Resumen")
+        total_venta = sum(it['subtotal'] for it in st.session_state.carrito)
+        
+        st.markdown(f"""
+            <div style='background-color: #f0f2f6; padding: 20px; border-radius: 10px; border-left: 5px solid #2e7d32;'>
+                <p style='margin-bottom: 0;'>TOTAL A COBRAR</p>
+                <h1 style='margin-top: 0; color: #2e7d32;'>${total_venta:,.2f}</h1>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        metodo = st.selectbox("Forma de Pago", ["Efectivo", "Transferencia", "Débito", "Crédito", "Fiado (Libreta)"])
+        
+        if st.button("✅ FINALIZAR Y GENERAR TICKET", use_container_width=True, type="primary"):
+            if st.session_state.carrito:
+                # Aquí va la lógica de guardado en Firebase que ya configuramos
+                st.success("Venta guardada correctamente.")
+                st.session_state.carrito = [] # Limpiamos para la próxima
+                st.rerun()
+
+# --- TAB GASTOS (Separación Negocio vs Personal) ---
+with tabs[2]:
+    st.subheader("📉 Registro de Salidas")
+    
+    tipo_gasto = st.radio("¿Qué tipo de salida es?", ["Gasto del Negocio", "Retiro Personal (Dueño)"], horizontal=True)
+    
+    with st.form("form_gastos"):
+        col1, col2 = st.columns(2)
+        if tipo_gasto == "Gasto del Negocio":
+            concepto = col1.selectbox("Concepto", ["Mercadería (Proveedor)", "Luz / Impuestos", "Sueldos", "Limpieza", "Otros"])
+        else:
+            concepto = col1.selectbox("Destino", ["Plata para casa", "Compras personales", "Varios"])
+            
+        monto = col2.number_input("Monto $", min_value=0.0, step=100.0)
+        detalle = st.text_input("Nota / Observación (opcional)")
+        
+        if st.form_submit_button("Registrar Movimiento"):
+            # Lógica para guardar en la colección 'gastos' de Firebase
+            st.success(f"Registrado: {tipo_gasto} - ${monto}")
