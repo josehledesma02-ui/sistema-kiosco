@@ -39,11 +39,14 @@ if 'autenticado' not in st.session_state:
     st.session_state.update({
         'autenticado': False, 'usuario': None, 'rol': None, 
         'id_negocio': None, 'nombre_real': None, 'carrito': [], 
-        'ultimo_ticket': None, 'df_proveedor': None
-    })
-
-def cargar_datos_proveedor():
+        def cargar_datos_proveedor():
     try:
         # Importante: Usar el link de exportación CSV para Sheets
         df = pd.read_csv(URL_PROVEEDOR_CSV)
-        # Limpieza de precios si vienen como texto ($1.
+        # Limpieza de precios si vienen como texto ($1.200,00)
+        if 'Precio' in df.columns:
+            df['Precio'] = df['Precio'].replace(r'[\$,]', '', regex=True).astype(float)
+        st.session_state.df_proveedor = df
+    except Exception as e:
+        # Esto es lo que le faltaba a tu código:
+        st.error(f"Error al conectar con la lista de precios: {e}")
