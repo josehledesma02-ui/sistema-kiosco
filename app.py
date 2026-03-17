@@ -164,21 +164,10 @@ else:
         Los precios se **congelan** al valor del día de la compra, siempre y cuando se respete la fecha de pago pactada.
         
         **Si cumplís:** Pagás el precio acordado originalmente.
+                
         **Si incumplís:** Los precios se actualizarán al valor del día si hubo una suba de precios general.
         """)
-        )
     else:
         st.success("🎉 ¡Estás al día! No registrás deudas pendientes.")
 except Exception as e:
     st.error(f"No se pudo cargar el historial: {e}")
-
-    # 7. NOTA LEGAL
-    st.divider()
-    with st.expander("📝 Nota sobre la vigencia de los precios", expanded=True):
-        st.info("""
-        Los precios se **congelan** al valor del día de la compra, siempre y cuando se respete la fecha de pago pactada.
-        
-        **Si cumplís:** Pagás el precio acordado originalmente.
-                
-        **Si incumplís:** Los precios se actualizarán al valor del día si hubo una suba de precios general.
-        """)
