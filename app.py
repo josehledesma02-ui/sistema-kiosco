@@ -54,7 +54,6 @@ def mostrar_logo(ancho=250, centrar=False):
         logo_url = LOGO_FABRICON
     
     if centrar:
-        # Crea 3 columnas para centrar la imagen en la del medio
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             st.image(logo_url, use_container_width=True)
@@ -63,14 +62,11 @@ def mostrar_logo(ancho=250, centrar=False):
 
 # --- PANTALLA DE INGRESO ---
 if not st.session_state['autenticado']:
-    st.write("") # Espacio superior
-    c1, c2, c3 = st.columns([1, 2, 1]) # Columnas principales para el formulario
+    st.write("") 
+    c1, c2, c3 = st.columns([1, 2, 1])
     
     with c2:
-        # Mostramos logo centrado
         mostrar_logo(centrar=True)
-        
-        # Título solicitado
         st.markdown("<h2 style='text-align: center;'>Acceso JL GESTIÓN</h2>", unsafe_allow_html=True)
         st.write("") 
         
@@ -96,9 +92,10 @@ if not st.session_state['autenticado']:
                 else:
                     st.error("❌ Usuario no encontrado")
 
-# --- PANTALLA PRINCIPAL ---
+# --- PANTALLA PRINCIPAL (LOGUEADO) ---
 else:
     rol = st.session_state['rol']
+    negocio_actual = st.session_state['id_negocio']
     nombre_pantalla = st.session_state['nombre_real'] or st.session_state['usuario']
 
     # SIDEBAR
@@ -118,13 +115,11 @@ else:
             st.markdown(f"<h1 style='text-align: center;'>Hola, {nombre_pantalla}</h1>", unsafe_allow_html=True)
         
         st.divider()
-
         try:
             user = st.session_state['usuario']
             c_doc = db.collection("clientes").document(user).get().to_dict()
             if c_doc:
-                fecha_pago_str = c_doc.get('Fecha_Acuerdo_Pago', "Consultar")
-                st.write(f"📅 Fecha pactada de pago: **{fecha_pago_str}**")
+                st.write(f"📅 Fecha pactada de pago: **{c_doc.get('Fecha_Acuerdo_Pago', 'Consultar')}**")
             
             mov_ref = db.collection("cuentas_corrientes").where("Cliente", "==", user).stream()
             lista_movs = [m.to_dict() for m in mov_ref]
@@ -138,14 +133,6 @@ else:
         except:
             st.info("Cargando información de cuenta...")
 
-        with st.expander("📝 Nota sobre la vigencia de los precios", expanded=True):
-            st.info("""
-            **Política de precios en Cuenta Corriente:**
-            *   **Precios:** Se congelan al día de la compra.
-            *   **Condición:** Respetar la **Fecha Pactada de Pago**.
-            *   **Incumplimiento:** Los precios se actualizarán al valor del día de pago efectivo.
-            """)
-
     # --- 2. VISTA SUPER ADMIN ---
     elif rol == "super_admin":
         st.title("Panel Administrativo")
@@ -153,20 +140,61 @@ else:
         
         with tab1:
             st.subheader("Alta de Usuario")
-            with st.form("crear_usuario"):
-                new_id = st.text_input("Usuario ID (ej: jose01)")
-                new_name = st.text_input("Nombre Completo")
-                new_pass = st.text_input("Contraseña")
-                new_rol = st.selectbox("Rol", ["cliente", "empleado", "proveedor", "negocio"])
+            with st.form("crear_usuario", clear_on_submit=True):
+                col_a, col_b = st.columns(2)
+                new_id = col_a.text_input("Usuario ID (ej: jose01)").strip().lower()
+                new_name = col_a.text_input("Nombre Completo")
+                new_pass = col_b.text_input("Contraseña", type="password")
+                new_rol = col_b.selectbox("Rol", ["cliente", "empleado", "proveedor", "negocio"])
                 new_neg = st.selectbox("Negocio", ["fabricon", "kiosco_trinidad", "otro"])
-                if st.form_submit_button("Crear"):
-                    db.collection("usuarios").document(new_id).set({
-                        "nombre": new_name, "password": new_pass, "rol": new_rol, "id_negocio": new_neg
-                    })
-                    st.success(f"Usuario {new_id} creado con éxito.")
+                
+                st.caption("Si es cliente:")
+                f_pago = st.text_input("Fecha Pactada de Pago", value="05 de cada mes")
+                
+                if st.form_submit_button("Registrar"):
+                    if new_id and new_pass:
+                        # Registro en usuarios
+                        db.collection("usuarios").document(new_id).set({
+                            "nombre": new_name, "password": new_pass, "rol": new_rol, "id_negocio": new_neg
+                        })
+                        # Si es cliente, creamos su ficha técnica
+                        if new_rol == "cliente":
+                            db.collection("clientes").document(new_id).set({
+                                "nombre": new_name, "Fecha_Acuerdo_Pago": f_pago, "id_negocio": new_neg
+                            })
+                        st.success(f"✅ Usuario {new_id} creado.")
 
     # --- 3. VISTA EMPLEADO ---
     elif rol == "empleado":
-        st.title("Terminal de Ventas")
-        st.write(f"Negocio: **{st.session_state.get('id_negocio').upper()}**")
-        st.info("Módulo operativo para carga de ventas.")
+        st.title("🛒 Terminal de Ventas")
+        st.write(f"Punto de Venta: **{negocio_actual.upper()}**")
+        
+        # Obtener lista de clientes del negocio para el selector
+        clientes_ref = db.collection("clientes").where("id_negocio", "==", negocio_actual).stream()
+        dict_clientes = {c.to_dict()['nombre']: c.id for c in clientes_ref}
+        
+        if not dict_clientes:
+            st.warning("No hay clientes registrados en este negocio.")
+        else:
+            with st.form("nueva_venta", clear_on_submit=True):
+                st.subheader("Cargar Producto a Cuenta Corriente")
+                cliente_sel = st.selectbox("Seleccionar Cliente", options=list(dict_clientes.keys()))
+                producto = st.text_input("Producto / Concepto")
+                precio = st.number_input("Precio ($)", min_value=0.0, step=100.0)
+                cantidad = st.number_input("Cantidad", min_value=1, value=1)
+                
+                if st.form_submit_button("Confirmar Venta"):
+                    if producto and precio > 0:
+                        nueva_venta = {
+                            "Cliente": dict_clientes[cliente_sel],
+                            "Producto": producto,
+                            "Precio_Unitario": precio,
+                            "Cantidad": cantidad,
+                            "Subtotal": precio * cantidad,
+                            "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                            "Negocio": negocio_actual
+                        }
+                        db.collection("cuentas_corrientes").add(nueva_venta)
+                        st.success(f"✅ Venta cargada a {cliente_sel}")
+                    else:
+                        st.error("Completa el producto y el precio.")
