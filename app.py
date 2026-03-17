@@ -39,13 +39,18 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ==========================================
-# 2. MOTOR DE DATOS (GOOGLE SHEETS)
+# 2. MOTOR DE DATOS Y ESTADO DE SESIÓN
 # ==========================================
 if 'autenticado' not in st.session_state:
     st.session_state.update({
-        'autenticado': False, 'usuario': None, 'rol': None, 
-        'id_negocio': None, 'nombre_real': None,
-        'carrito': [], 'df_proveedor': None, 'nuevo_cliente_mode': False
+        'autenticado': False, 
+        'usuario': None, 
+        'rol': None, 
+        'id_negocio': None, 
+        'nombre_real': None,
+        'carrito': [], 
+        'df_proveedor': None,
+        'nuevo_cliente_mode': False  #
     })
 
 def limpiar_precio_final(valor):
