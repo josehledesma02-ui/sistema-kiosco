@@ -1,5 +1,5 @@
 streamlit
-gspread
+firebase-admin
 pandas
-oauth2client
 streamlit-cookies-manager
+google-auth
