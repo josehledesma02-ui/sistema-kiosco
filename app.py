@@ -127,7 +127,7 @@ else:
                 df = pd.DataFrame(lista_movs)
                 total = pd.to_numeric(df['Subtotal']).sum()
                 st.metric("TU SALDO PENDIENTE", f"${total:,.2f}")
-                st.table(df[['Fecha', 'Producto', 'Subtotal']])
+                st.dataframe(df[['Fecha', 'Producto', 'Subtotal']], use_container_width=True)
             else:
                 st.success("🎉 ¡No tenés deudas pendientes!")
         except:
@@ -146,55 +146,85 @@ else:
                 new_name = col_a.text_input("Nombre Completo")
                 new_pass = col_b.text_input("Contraseña", type="password")
                 new_rol = col_b.selectbox("Rol", ["cliente", "empleado", "proveedor", "negocio"])
+                
                 new_neg = st.selectbox("Negocio", ["fabricon", "kiosco_trinidad", "otro"])
                 
-                st.caption("Si es cliente:")
+                st.divider()
+                st.caption("Configuración adicional para Clientes")
                 f_pago = st.text_input("Fecha Pactada de Pago", value="05 de cada mes")
                 
-                if st.form_submit_button("Registrar"):
-                    if new_id and new_pass:
-                        # Registro en usuarios
+                if st.form_submit_button("Registrar Usuario"):
+                    if new_id and new_pass and new_name:
+                        # Registro en colección usuarios
                         db.collection("usuarios").document(new_id).set({
-                            "nombre": new_name, "password": new_pass, "rol": new_rol, "id_negocio": new_neg
+                            "nombre": new_name, 
+                            "password": new_pass, 
+                            "rol": new_rol, 
+                            "id_negocio": new_neg
                         })
-                        # Si es cliente, creamos su ficha técnica
+                        # Registro paralelo en clientes si corresponde
                         if new_rol == "cliente":
                             db.collection("clientes").document(new_id).set({
-                                "nombre": new_name, "Fecha_Acuerdo_Pago": f_pago, "id_negocio": new_neg
+                                "nombre": new_name, 
+                                "Fecha_Acuerdo_Pago": f_pago, 
+                                "id_negocio": new_neg
                             })
-                        st.success(f"✅ Usuario {new_id} creado.")
+                        st.success(f"✅ Usuario '{new_id}' creado con éxito.")
+                    else:
+                        st.error("Por favor, completa ID, Nombre y Contraseña.")
 
     # --- 3. VISTA EMPLEADO ---
     elif rol == "empleado":
         st.title("🛒 Terminal de Ventas")
-        st.write(f"Punto de Venta: **{negocio_actual.upper()}**")
+        st.subheader(f"Punto de Venta: {negocio_actual.upper()}")
         
-        # Obtener lista de clientes del negocio para el selector
+        # Obtener clientes del negocio
         clientes_ref = db.collection("clientes").where("id_negocio", "==", negocio_actual).stream()
         dict_clientes = {c.to_dict()['nombre']: c.id for c in clientes_ref}
         
         if not dict_clientes:
-            st.warning("No hay clientes registrados en este negocio.")
+            st.warning("No hay clientes registrados para este negocio.")
         else:
-            with st.form("nueva_venta", clear_on_submit=True):
-                st.subheader("Cargar Producto a Cuenta Corriente")
-                cliente_sel = st.selectbox("Seleccionar Cliente", options=list(dict_clientes.keys()))
-                producto = st.text_input("Producto / Concepto")
-                precio = st.number_input("Precio ($)", min_value=0.0, step=100.0)
-                cantidad = st.number_input("Cantidad", min_value=1, value=1)
+            col_form, col_hist = st.columns([1, 1])
+            
+            with col_form:
+                with st.form("nueva_venta", clear_on_submit=True):
+                    st.markdown("### Nueva Carga")
+                    cliente_sel = st.selectbox("Seleccionar Cliente", options=list(dict_clientes.keys()))
+                    producto = st.text_input("Producto / Concepto")
+                    precio = st.number_input("Precio ($)", min_value=0.0, step=50.0)
+                    cantidad = st.number_input("Cantidad", min_value=1, value=1)
+                    
+                    if st.form_submit_button("Confirmar y Cargar"):
+                        if producto and precio > 0:
+                            subtotal = precio * cantidad
+                            nueva_venta = {
+                                "Cliente": dict_clientes[cliente_sel],
+                                "Nombre_Cliente": cliente_sel,
+                                "Producto": producto,
+                                "Precio_Unitario": precio,
+                                "Cantidad": cantidad,
+                                "Subtotal": subtotal,
+                                "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                                "Negocio": negocio_actual
+                            }
+                            db.collection("cuentas_corrientes").add(nueva_venta)
+                            st.success(f"✅ ${subtotal} cargados a {cliente_sel}")
+                            st.rerun() # Para actualizar el historial
+                        else:
+                            st.error("Error: El producto y el precio son obligatorios.")
+
+            with col_hist:
+                st.markdown("### Últimos Movimientos")
+                # Mostrar los últimos 10 movimientos del negocio
+                movs_ref = db.collection("cuentas_corrientes")\
+                    .where("Negocio", "==", negocio_actual)\
+                    .order_by("Fecha", direction=firestore.Query.DESCENDING)\
+                    .limit(10).stream()
                 
-                if st.form_submit_button("Confirmar Venta"):
-                    if producto and precio > 0:
-                        nueva_venta = {
-                            "Cliente": dict_clientes[cliente_sel],
-                            "Producto": producto,
-                            "Precio_Unitario": precio,
-                            "Cantidad": cantidad,
-                            "Subtotal": precio * cantidad,
-                            "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                            "Negocio": negocio_actual
-                        }
-                        db.collection("cuentas_corrientes").add(nueva_venta)
-                        st.success(f"✅ Venta cargada a {cliente_sel}")
-                    else:
-                        st.error("Completa el producto y el precio.")
+                lista_movs = [m.to_dict() for m in movs_ref]
+                if lista_movs:
+                    df_hist = pd.DataFrame(lista_movs)
+                    st.dataframe(df_hist[['Fecha', 'Nombre_Cliente', 'Producto', 'Subtotal']], use_container_width=True)
+                else:
+                    st.info("No hay ventas registradas recientemente.")
