@@ -7,11 +7,16 @@ from datetime import datetime
 # 1. CONFIGURACIÓN DE PÁGINA
 st.set_page_config(page_title="JHL Gestión", page_icon="📊", layout="wide")
 
-# 2. CONFIGURACIÓN DE LOGOS DESDE GITHUB
-# Usuario: josehledesma02-ui | Repositorio: sistema-kiosco
-GITHUB_BASE = "https://raw.githubusercontent.com/josehledesma02-ui/sistema-kiosco/main"
-LOGO_SISTEMA = f"{GITHUB_BASE}/logo_principal.png"
-LOGO_FABRICON = f"{GITHUB_BASE}/fabricon.png"
+# 2. CONFIGURACIÓN DE LOGOS (Ruta corregida con carpetas)
+USER = "josehledesma02-ui"
+REPO = "sistema-kiosco"
+BRANCH = "main"
+
+# Agregamos /static/images/ a la URL base
+URL_BASE = f"https://raw.githubusercontent.com/{USER}/{REPO}/{BRANCH}/static/images"
+
+LOGO_SISTEMA = f"{URL_BASE}/logo_principal.png"
+LOGO_FABRICON = f"{URL_BASE}/fabricon.png"
 
 # 3. CONEXIÓN A FIREBASE
 if not firebase_admin._apps:
