@@ -133,27 +133,30 @@ else:
 
     st.divider()
 
-    # 6. DETALLE DE CUENTA (Firebase)
-    try:
-        # Filtramos movimientos por el nombre del cliente
-        mov_ref = db.collection("cuentas_corrientes").where("Cliente", "==", st.session_state['usuario']).stream()
-        lista_movs = [m.to_dict() for m in mov_ref]
+    # 6. DETALLE DE CUENTA (Sin opción de descarga)
+try:
+    mov_ref = db.collection("cuentas_corrientes").where("Cliente", "==", st.session_state['usuario']).stream()
+    lista_movs = [m.to_dict() for m in mov_ref]
+    
+    if lista_movs:
+        df_mov = pd.DataFrame(lista_movs)
+        df_mov['Subtotal'] = pd.to_numeric(df_mov['Subtotal'])
+        total_deuda = df_mov['Subtotal'].sum()
         
-        if lista_movs:
-            df_mov = pd.DataFrame(lista_movs)
-            # Aseguramos que Subtotal sea numérico por si Firebase lo devuelve como texto
-            df_mov['Subtotal'] = pd.to_numeric(df_mov['Subtotal'])
-            total_deuda = df_mov['Subtotal'].sum()
-            
-            st.metric("TU SALDO PENDIENTE", f"${total_deuda:,.2f}")
-            columnas = ['Fecha', 'Producto', 'Cantidad', 'Precio_Unitario', 'Subtotal']
-            # Solo mostramos columnas que existan en el DataFrame
-            cols_mostrar = [c for c in columnas if c in df_mov.columns]
-            st.dataframe(df_mov[cols_mostrar], use_container_width=True, hide_index=True)
-        else:
-            st.success("🎉 ¡Estás al día! No registrás deudas pendientes.")
-    except Exception as e:
-        st.error(f"No se pudo cargar el historial: {e}")
+        st.metric("TU SALDO PENDIENTE", f"${total_deuda:,.2f}")
+        columnas = ['Fecha', 'Producto', 'Cantidad', 'Precio_Unitario', 'Subtotal']
+        cols_mostrar = [c for c in columnas if c in df_mov.columns]
+
+        # MODIFICACIÓN AQUÍ: Agregamos la configuración para ocultar herramientas
+        st.dataframe(
+            df_mov[cols_mostrar], 
+            use_container_width=True, 
+            hide_index=True
+        )
+    else:
+        st.success("🎉 ¡Estás al día! No registrás deudas pendientes.")
+except Exception as e:
+    st.error(f"No se pudo cargar el historial: {e}")
 
     # 7. NOTA LEGAL
     st.divider()
