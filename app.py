@@ -19,7 +19,7 @@ try:
     alcance = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     
     # Esta línea es la que busca lo que pegaste en el paso anterior
-    creds_dict = st.secrets["gcp_service_account"]
+   creds_dict = st.secrets["gcp_service_account"]
     credenciales = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, alcance)
     
     cliente = gspread.authorize(credenciales)
