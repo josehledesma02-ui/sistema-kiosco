@@ -32,7 +32,7 @@ db = firestore.client()
 if 'autenticado' not in st.session_state:
     st.session_state.update({
         'autenticado': False, 'usuario': None, 'rol': None, 
-        'id_negocio': None, 'nombre_real': None
+        'id_negocio': None, 'nombre_real': None, 'permisos': 'todo'
     })
 
 def cerrar_sesion():
@@ -40,7 +40,6 @@ def cerrar_sesion():
         del st.session_state[key]
     st.rerun()
 
-# --- 🎨 INTERFAZ ---
 def mostrar_logo_interfaz(login=False):
     negocio = st.session_state.get('id_negocio')
     ruta = LOGO_FABRICON if negocio == "fabricon" else LOGO_SISTEMA
@@ -58,17 +57,18 @@ if not st.session_state['autenticado']:
     c1, col_login, c3 = st.columns([1, 1.5, 1])
     with col_login:
         mostrar_logo_interfaz(login=True)
-        st.markdown("<h3 style='text-align: center;'>Iniciar Sesión</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='text-align: center;'>Panel de Control</h3>", unsafe_allow_html=True)
         u_input = st.text_input("Usuario").strip().lower()
         c_input = st.text_input("Contraseña", type="password").strip()
-        if st.button("Ingresar", use_container_width=True):
+        if st.button("Ingresar al Sistema", use_container_width=True):
             user_ref = db.collection("usuarios").document(u_input).get()
             if user_ref.exists:
                 d = user_ref.to_dict()
                 if str(d.get('password')) == c_input:
                     st.session_state.update({
                         'autenticado': True, 'usuario': u_input, 'rol': d.get('rol'), 
-                        'id_negocio': d.get('id_negocio'), 'nombre_real': d.get('nombre')
+                        'id_negocio': d.get('id_negocio'), 'nombre_real': d.get('nombre'),
+                        'permisos': d.get('permisos', 'todo')
                     })
                     st.rerun()
                 else: st.error("❌ Contraseña incorrecta")
@@ -77,136 +77,152 @@ if not st.session_state['autenticado']:
 # --- 🖥️ PANEL PRINCIPAL ---
 else:
     rol = st.session_state['rol']
+    permisos = st.session_state['permisos']
     negocio_id = st.session_state['id_negocio']
     nombre_pantalla = st.session_state['nombre_real'] or st.session_state['usuario']
 
     with st.sidebar:
         mostrar_logo_interfaz()
         st.write(f"👤 **{nombre_pantalla}**")
-        st.caption(f"Rol: {rol.upper()} | Sucursal: {negocio_id.upper()}")
+        st.caption(f"Sucursal: {negocio_id.upper()}")
+        if rol == "empleado":
+            st.info(f"Acceso: {permisos.upper()}")
         st.divider()
         if st.button("🔴 Cerrar Sesión", use_container_width=True):
             cerrar_sesion()
 
     # ==========================================
-    # 1. VISTA DUEÑO (ADMINISTRACIÓN TOTAL)
+    # 🏢 VISTA DUEÑO / ENCARGADO / EMPLEADO
     # ==========================================
-    if rol == "negocio":
-        st.title(f"📊 Panel de Control: {negocio_id.upper()}")
+    if rol in ["negocio", "empleado"]:
         
-        tabs = st.tabs(["💰 Cuentas Clientes", "📉 Gastos Propios", "🧾 Compras/Boletas", "📦 Inventario", "👥 Empleados"])
-
-        # TAB: CLIENTES Y DEUDAS
-        with tabs[0]:
-            st.subheader("Deudas de Clientes (Cuentas Corrientes)")
-            movs = db.collection("cuentas_corrientes").where("Negocio", "==", negocio_id).stream()
-            df_v = pd.DataFrame([m.to_dict() for m in movs])
-            if not df_v.empty:
-                col1, col2 = st.columns(2)
-                col1.metric("TOTAL A COBRAR", f"${df_v['Subtotal'].sum():,.2f}")
-                col2.metric("CLIENTES ACTIVOS", len(df_v['Nombre_Cliente'].unique()))
-                st.dataframe(df_v[['Fecha', 'Nombre_Cliente', 'Producto', 'Subtotal']], use_container_width=True)
-            else: st.info("No hay deudas registradas.")
-
-        # TAB: GASTOS DEL NEGOCIO
-        with tabs[1]:
-            st.subheader("Registrar Gastos Mensuales")
-            with st.form("form_gastos", clear_on_submit=True):
-                c1, c2, c3 = st.columns(3)
-                cat_gasto = c1.selectbox("Categoría", ["Alquiler", "Luz/Agua", "Sueldos", "Impuestos", "Otros"])
-                desc_gasto = c2.text_input("Descripción")
-                monto_gasto = c3.number_input("Importe $", min_value=0.0)
-                if st.form_submit_button("Guardar Gasto"):
-                    db.collection("gastos").add({
-                        "id_negocio": negocio_id, "categoria": cat_gasto, 
-                        "descripcion": desc_gasto, "monto": monto_gasto, 
-                        "fecha": datetime.now().strftime("%d/%m/%Y")
-                    })
-                    st.success("Gasto registrado.")
-
-        # TAB: COMPRAS A PROVEEDORES
-        with tabs[2]:
-            st.subheader("Carga de Boletas de Proveedores")
-            with st.form("form_compras", clear_on_submit=True):
-                c1, c2 = st.columns(2)
-                prov = c1.text_input("Nombre del Proveedor")
-                boleta = c2.text_input("N° de Boleta/Factura")
-                monto_c = c1.number_input("Total $", min_value=0.0)
-                estado_c = c2.selectbox("Estado de Pago", ["Pendiente", "Pagado"])
-                if st.form_submit_button("Cargar Boleta"):
-                    db.collection("compras_proveedores").add({
-                        "id_negocio": negocio_id, "proveedor": prov, "boleta": boleta,
-                        "monto": monto_c, "estado": estado_c, "fecha": datetime.now().strftime("%d/%m/%Y")
-                    })
-                    st.success("Compra cargada al sistema.")
-
-        # TAB: INVENTARIO
-        with tabs[3]:
-            st.subheader("Gestión de Stock")
-            # Simulación de Inventario (Se puede expandir con una colección 'productos')
-            st.info("Aquí podrás ver el stock crítico y actualizar precios masivos próximamente.")
-
-        # TAB: EMPLEADOS
-        with tabs[4]:
-            st.subheader("Alta de Personal")
-            with st.form("nuevo_empleado"):
-                e_user = st.text_input("Usuario (para login)").lower().strip()
-                e_nom = st.text_input("Nombre Completo")
-                e_pass = st.text_input("Contraseña")
-                if st.form_submit_button("Crear Acceso Empleado"):
-                    db.collection("usuarios").document(e_user).set({
-                        "nombre": e_nom, "password": e_pass, 
-                        "rol": "empleado", "id_negocio": negocio_id
-                    })
-                    st.success(f"Empleado {e_nom} habilitado.")
-
-    # ==========================================
-    # 2. VISTA EMPLEADO (VENTAS)
-    # ==========================================
-    elif rol == "empleado":
-        st.title(f"🛒 Ventas: {negocio_id.upper()}")
-        t1, t2 = st.tabs(["➕ Cargar Venta", "📜 Historial Hoy"])
+        # Definir qué pestañas ve cada uno según su permiso
+        todas_las_tabs = ["💰 Ventas", "📉 Gastos", "🧾 Compras", "📦 Stock", "👥 Personal"]
         
-        with t1:
-            clientes_ref = db.collection("clientes").where("id_negocio", "==", negocio_id).stream()
-            dict_cl = {c.to_dict()['nombre']: c.id for c in clientes_ref}
-            if dict_cl:
-                with st.form("venta_empleado", clear_on_submit=True):
-                    cl_sel = st.selectbox("Cliente", list(dict_cl.keys()))
-                    prod = st.text_input("Producto")
-                    prec = st.number_input("Precio", min_value=0.0)
-                    if st.form_submit_button("Confirmar Carga"):
-                        db.collection("cuentas_corrientes").add({
-                            "Cliente": dict_cl[cl_sel], "Nombre_Cliente": cl_sel,
-                            "Producto": prod, "Subtotal": prec, "Negocio": negocio_id,
-                            "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                            "Timestamp": datetime.now()
+        # Filtrado lógico de pestañas
+        if rol == "negocio" or permisos == "encargado":
+            tabs = st.tabs(todas_las_tabs)
+        elif permisos == "cajero":
+            tabs = st.tabs(["💰 Ventas"])
+        elif permisos == "repositor":
+            tabs = st.tabs(["📦 Stock", "🧾 Compras"])
+        else:
+            tabs = st.tabs(["Información"])
+
+        # --- 1. SECCIÓN VENTAS (Cajero, Encargado, Dueño) ---
+        if rol == "negocio" or permisos in ["encargado", "cajero"]:
+            with tabs[0]:
+                st.subheader("Punto de Venta y Cuentas Corrientes")
+                
+                # Formulario de Venta
+                clientes_ref = db.collection("clientes").where("id_negocio", "==", negocio_id).stream()
+                dict_cl = {c.to_dict()['nombre']: c.id for c in clientes_ref}
+                
+                with st.expander("➕ Registrar Nueva Venta", expanded=True):
+                    if dict_cl:
+                        with st.form("form_venta", clear_on_submit=True):
+                            c1, c2 = st.columns(2)
+                            cliente_sel = c1.selectbox("Cliente", list(dict_cl.keys()))
+                            producto = c2.text_input("Producto/Servicio")
+                            precio = c1.number_input("Precio $", min_value=0.0, step=100.0)
+                            cantidad = c2.number_input("Cantidad", min_value=1, value=1)
+                            if st.form_submit_button("Confirmar Venta"):
+                                db.collection("cuentas_corrientes").add({
+                                    "Cliente": dict_cl[cliente_sel], "Nombre_Cliente": cliente_sel,
+                                    "Producto": producto, "Subtotal": precio * cantidad,
+                                    "Negocio": negocio_id, "Fecha": datetime.now().strftime("%d/%m/%Y %H:%M"),
+                                    "Timestamp": datetime.now()
+                                })
+                                st.success("Venta registrada con éxito")
+                    else: st.warning("No hay clientes cargados.")
+
+                # Tabla de Deudas
+                st.divider()
+                st.write("### Deudas Activas")
+                movs = db.collection("cuentas_corrientes").where("Negocio", "==", negocio_id).order_by("Timestamp", direction=firestore.Query.DESCENDING).limit(50).stream()
+                df_v = pd.DataFrame([m.to_dict() for m in movs])
+                if not df_v.empty:
+                    st.dataframe(df_v[['Fecha', 'Nombre_Cliente', 'Producto', 'Subtotal']], use_container_width=True)
+                    st.metric("Total en la calle", f"${df_v['Subtotal'].sum():,.2f}")
+
+        # --- 2. SECCIÓN GASTOS (Dueño, Encargado) ---
+        if rol == "negocio" or permisos == "encargado":
+            with tabs[1]:
+                st.subheader("Gastos del Negocio (Luz, Alquiler, Sueldos)")
+                with st.form("form_gastos", clear_on_submit=True):
+                    c1, c2, c3 = st.columns(3)
+                    cat = c1.selectbox("Tipo", ["Alquiler", "Luz", "Sueldos", "Mercadería", "Otros"])
+                    det = c2.text_input("Detalle")
+                    mon = c3.number_input("Monto $", min_value=0.0)
+                    if st.form_submit_button("Cargar Gasto"):
+                        db.collection("gastos").add({
+                            "id_negocio": negocio_id, "categoria": cat, "detalle": det,
+                            "monto": mon, "fecha": datetime.now().strftime("%d/%m/%Y")
                         })
-                        st.success("Cargado!")
-            else: st.warning("No hay clientes registrados.")
+                        st.success("Gasto guardado")
 
-        with t2:
-            m_hoy = db.collection("cuentas_corrientes").where("Negocio", "==", negocio_id).limit(10).stream()
-            df_hoy = pd.DataFrame([m.to_dict() for m in m_hoy])
-            if not df_hoy.empty: st.table(df_hoy[['Nombre_Cliente', 'Producto', 'Subtotal']])
+        # --- 3. SECCIÓN COMPRAS / PROVEEDORES ---
+        if rol == "negocio" or permisos in ["encargado", "repositor"]:
+            t_idx = 2 if (rol == "negocio" or permisos == "encargado") else 1
+            with tabs[t_idx]:
+                st.subheader("Compras a Proveedores / Boletas")
+                with st.form("form_compras", clear_on_submit=True):
+                    c1, c2 = st.columns(2)
+                    proveedor = c1.text_input("Proveedor")
+                    boleta_n = c2.text_input("N° de Factura")
+                    importe = c1.number_input("Total Factura $", min_value=0.0)
+                    estado_p = c2.selectbox("Estado", ["Pendiente", "Pagado"])
+                    if st.form_submit_button("Cargar Boleta"):
+                        db.collection("compras_negocio").add({
+                            "id_negocio": negocio_id, "proveedor": proveedor, 
+                            "boleta": boleta_n, "monto": importe, "estado": estado_p,
+                            "fecha": datetime.now().strftime("%d/%m/%Y")
+                        })
+                        st.success("Boleta ingresada al sistema")
+
+        # --- 4. SECCIÓN STOCK (Dueño, Encargado, Repositor) ---
+        if rol == "negocio" or permisos in ["encargado", "repositor"]:
+            t_idx = 3 if (rol == "negocio" or permisos == "encargado") else 0
+            with tabs[t_idx]:
+                st.subheader("Control de Inventario")
+                st.info("Aquí se visualizará el stock cargado mediante las compras.")
+
+        # --- 5. SECCIÓN PERSONAL (Solo Dueño o Encargado) ---
+        if rol == "negocio" or permisos == "encargado":
+            with tabs[4]:
+                st.subheader("Gestión de Usuarios y Permisos")
+                with st.expander("👤 Crear Nuevo Acceso"):
+                    with st.form("form_personal"):
+                        u_nuevo = st.text_input("Usuario Login").lower().strip()
+                        n_nuevo = st.text_input("Nombre Real")
+                        p_nuevo = st.text_input("Contraseña")
+                        perm_nuevo = st.selectbox("Nivel de Acceso", ["cajero", "repositor", "encargado"])
+                        if st.form_submit_button("Dar de Alta"):
+                            if u_nuevo and p_nuevo:
+                                db.collection("usuarios").document(u_nuevo).set({
+                                    "nombre": n_nuevo, "password": p_nuevo,
+                                    "rol": "empleado", "id_negocio": negocio_id,
+                                    "permisos": perm_nuevo
+                                })
+                                st.success(f"Empleado {n_nuevo} creado como {perm_nuevo}")
+                            else: st.error("Faltan datos")
 
     # ==========================================
-    # 3. VISTA CLIENTE
+    # 👤 VISTA CLIENTE
     # ==========================================
     elif rol == "cliente":
         st.header(f"👋 Hola, {nombre_pantalla}")
         movs = db.collection("cuentas_corrientes").where("Cliente", "==", st.session_state['usuario']).stream()
         df_cli = pd.DataFrame([m.to_dict() for m in movs])
         if not df_cli.empty:
-            st.metric("MI SALDO PENDIENTE", f"${df_cli['Subtotal'].sum():,.2f}")
-            st.write("### Detalle de mis compras")
+            st.metric("MI DEUDA ACTUAL", f"${df_cli['Subtotal'].sum():,.2f}")
             st.dataframe(df_cli[['Fecha', 'Producto', 'Subtotal']], use_container_width=True)
-        else: st.success("No tienes deudas pendientes.")
+        else:
+            st.success("Estás al día. ¡No tenés deudas!")
 
     # ==========================================
-    # 4. VISTA SUPER ADMIN
+    # ⚙️ SUPER ADMIN
     # ==========================================
     elif rol == "super_admin":
-        st.title("⚙️ Configuración Global")
-        # (Aquí puedes añadir la creación de nuevos negocios/dueños)
-        st.write("Panel para JL Gestión Central")
+        st.title("Administración Central JL")
+        st.write("Panel para crear nuevos Negocios y Dueños.")
