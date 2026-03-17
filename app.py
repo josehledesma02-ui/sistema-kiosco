@@ -9,7 +9,6 @@ import os
 st.set_page_config(page_title="JL Gestión", page_icon="📊", layout="wide")
 
 # 2. CONFIGURACIÓN DE LOGOS (RUTAS LOCALES)
-# Estas rutas asumen que en tu GitHub tenés una carpeta 'static' y adentro 'images'
 LOGO_SISTEMA = "static/images/logo_principal.png"
 LOGO_FABRICON = "static/images/fabricon.png"
 
@@ -44,33 +43,30 @@ def cerrar_sesion():
         del st.session_state[key]
     st.rerun()
 
-# --- 🎨 FUNCIÓN PARA LOGO DINÁMICO (LOCAL Y SEGURA) ---
-def mostrar_logo(ancho=250, centrar=False):
+# --- 🎨 FUNCIÓN PARA LOGO (SOLO PARA EL SIDEBAR O LOGIN) ---
+def mostrar_logo_interfaz(ancho=250, login=False):
     negocio = st.session_state.get('id_negocio')
-    # Determinar qué archivo buscar
     ruta = LOGO_FABRICON if negocio == "fabricon" else LOGO_SISTEMA
     
-    # Verificar si el archivo existe en la carpeta del proyecto
     if os.path.exists(ruta):
-        if centrar:
+        if login:
+            # Centrado para la pantalla de inicio
             col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
                 st.image(ruta, use_container_width=True)
         else:
-            st.image(ruta, width=ancho)
+            # Simple para la barra lateral
+            st.image(ruta, use_container_width=True)
     else:
-        # Si el archivo no está, mostramos un título para que no salga el "0"
-        texto_alternativo = "FABRICÓN" if negocio == "fabricon" else "JL GESTIÓN"
-        if centrar:
-            st.markdown(f"<h1 style='text-align: center;'>{texto_alternativo}</h1>", unsafe_allow_html=True)
-        else:
-            st.subheader(texto_alternativo)
+        texto = "FABRICÓN" if negocio == "fabricon" else "JL GESTIÓN"
+        st.subheader(texto)
 
 # --- 🚪 PANTALLA DE INGRESO ---
 if not st.session_state['autenticado']:
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        mostrar_logo(centrar=True)
+        # En el login lo mostramos central porque no hay sidebar
+        mostrar_logo_interfaz(login=True)
         st.markdown("<h3 style='text-align: center;'>Iniciar Sesión</h3>", unsafe_allow_html=True)
         u_input = st.text_input("Usuario").strip().lower()
         c_input = st.text_input("Contraseña", type="password").strip()
@@ -96,9 +92,9 @@ else:
     negocio_actual = st.session_state['id_negocio']
     nombre_pantalla = st.session_state['nombre_real'] or st.session_state['usuario']
 
-    # Barra lateral
+    # --- BARRA LATERAL (LOGO SOLO AQUÍ) ---
     with st.sidebar:
-        mostrar_logo(ancho=150)
+        mostrar_logo_interfaz() # Logo a la izquierda
         st.write(f"👤 **{nombre_pantalla}**")
         st.caption(f"Rol: {rol.upper()} | {negocio_actual}")
         st.divider()
@@ -107,7 +103,6 @@ else:
 
     # --- 1. VISTA CLIENTE ---
     if rol == "cliente":
-        mostrar_logo(ancho=200)
         st.markdown(f"## Hola, {nombre_pantalla}")
         st.divider()
         
@@ -127,7 +122,6 @@ else:
 
     # --- 2. VISTA EMPLEADO ---
     elif rol == "empleado":
-        mostrar_logo(ancho=180)
         st.title("🛒 Terminal de Ventas")
         st.subheader(f"Negocio: {negocio_actual.upper()}")
         
@@ -162,7 +156,6 @@ else:
 
     # --- 3. VISTA DUEÑO (NEGOCIO) ---
     elif rol == "negocio":
-        mostrar_logo(ancho=200)
         st.title(f"📊 Dashboard: {negocio_actual.upper()}")
         
         movs = db.collection("cuentas_corrientes").where("Negocio", "==", negocio_actual).stream()
@@ -180,13 +173,11 @@ else:
 
     # --- 4. VISTA PROVEEDOR ---
     elif rol == "proveedor":
-        mostrar_logo(ancho=200)
         st.title("🚚 Panel de Proveedor")
         st.info("Aquí verás próximamente el estado de tus pagos y entregas.")
 
     # --- 5. VISTA SUPER ADMIN ---
     elif rol == "super_admin":
-        mostrar_logo(ancho=200)
         st.title("⚙️ Administración Central")
         tab1, tab2 = st.tabs(["👥 Usuarios", "🏢 Negocios"])
         
