@@ -5,14 +5,12 @@ import pandas as pd
 from datetime import datetime
 
 # 1. CONFIGURACIÓN DE PÁGINA
-st.set_page_config(page_title="JHL Gestión", page_icon="📊", layout="wide")
+st.set_page_config(page_title="JL Gestión", page_icon="📊", layout="wide")
 
-# 2. CONFIGURACIÓN DE LOGOS (Ruta corregida con carpetas)
+# 2. CONFIGURACIÓN DE LOGOS (GitHub)
 USER = "josehledesma02-ui"
 REPO = "sistema-kiosco"
 BRANCH = "main"
-
-# Agregamos /static/images/ a la URL base
 URL_BASE = f"https://raw.githubusercontent.com/{USER}/{REPO}/{BRANCH}/static/images"
 
 LOGO_SISTEMA = f"{URL_BASE}/logo_principal.png"
@@ -50,26 +48,31 @@ def cerrar_sesion():
     st.rerun()
 
 # --- 🎨 FUNCIÓN PARA LOGO DINÁMICO ---
-def mostrar_logo(ancho=200):
-    # Si el logo no carga (URL rota), Streamlit mostrará un error amigable o nada
-    try:
-        if not st.session_state['autenticado']:
-            st.image(LOGO_SISTEMA, width=ancho)
-        else:
-            negocio = st.session_state.get('id_negocio')
-            if negocio == "fabricon":
-                st.image(LOGO_FABRICON, width=ancho)
-            else:
-                st.image(LOGO_SISTEMA, width=ancho)
-    except:
-        st.subheader("JHL Gestión")
+def mostrar_logo(ancho=250, centrar=False):
+    logo_url = LOGO_SISTEMA
+    if st.session_state.get('autenticado') and st.session_state.get('id_negocio') == "fabricon":
+        logo_url = LOGO_FABRICON
+    
+    if centrar:
+        # Crea 3 columnas para centrar la imagen en la del medio
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.image(logo_url, use_container_width=True)
+    else:
+        st.image(logo_url, width=ancho)
 
 # --- PANTALLA DE INGRESO ---
 if not st.session_state['autenticado']:
-    c1, c2, c3 = st.columns([1, 1, 1])
+    st.write("") # Espacio superior
+    c1, c2, c3 = st.columns([1, 2, 1]) # Columnas principales para el formulario
+    
     with c2:
-        mostrar_logo(ancho=250)
-        st.markdown("<h4 style='text-align: center;'>Acceso JHL Gestión</h4>", unsafe_allow_html=True)
+        # Mostramos logo centrado
+        mostrar_logo(centrar=True)
+        
+        # Título solicitado
+        st.markdown("<h2 style='text-align: center;'>Acceso JL GESTIÓN</h2>", unsafe_allow_html=True)
+        st.write("") 
         
         u_input = st.text_input("Usuario", key="u_log").strip()
         c_input = st.text_input("Contraseña", type="password", key="p_log").strip()
@@ -100,7 +103,7 @@ else:
 
     # SIDEBAR
     with st.sidebar:
-        mostrar_logo(ancho=120)
+        mostrar_logo(ancho=150)
         st.write(f"👤 **{nombre_pantalla}**")
         st.write(f"Rol: {rol.upper()}")
         st.divider()
@@ -111,12 +114,11 @@ else:
     if rol == "cliente":
         c_izq, c_cen, c_der = st.columns([1, 2, 1])
         with c_cen:
-            mostrar_logo(ancho=250)
+            mostrar_logo(centrar=True)
             st.markdown(f"<h1 style='text-align: center;'>Hola, {nombre_pantalla}</h1>", unsafe_allow_html=True)
         
         st.divider()
 
-        # Detalle de Saldo y Fechas
         try:
             user = st.session_state['usuario']
             c_doc = db.collection("clientes").document(user).get().to_dict()
@@ -155,7 +157,7 @@ else:
                 new_id = st.text_input("Usuario ID (ej: jose01)")
                 new_name = st.text_input("Nombre Completo")
                 new_pass = st.text_input("Contraseña")
-                new_rol = st.selectbox("Rol", ["cliente", "empleado", "super_admin"])
+                new_rol = st.selectbox("Rol", ["cliente", "empleado", "proveedor", "negocio"])
                 new_neg = st.selectbox("Negocio", ["fabricon", "kiosco_trinidad", "otro"])
                 if st.form_submit_button("Crear"):
                     db.collection("usuarios").document(new_id).set({
@@ -167,3 +169,4 @@ else:
     elif rol == "empleado":
         st.title("Terminal de Ventas")
         st.write(f"Negocio: **{st.session_state.get('id_negocio').upper()}**")
+        st.info("Módulo operativo para carga de ventas.")
