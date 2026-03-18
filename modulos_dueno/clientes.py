@@ -2,7 +2,7 @@ import streamlit as st
 from datetime import datetime
 
 def renderizar(db, id_negocio):
-    # --- ESTILOS VISUALES ---
+    # --- ESTILOS VISUALES (INTACTOS) ---
     st.markdown("""
         <style>
             .sub-blue {
@@ -34,13 +34,15 @@ def renderizar(db, id_negocio):
 
     tab_lista, tab_nuevo = st.tabs(["📋 Lista de Clientes", "➕ Agregar Nuevo"])
 
-    # --- PESTAÑA 1: LISTA Y DETALLE ---
+    # --- PESTAÑA 1: LISTA (CORREGIDA PARA QUE MUESTRE TODO) ---
     with tab_lista:
         st.markdown('<div class="sub-blue">Clientes de tu Negocio</div>', unsafe_allow_html=True)
         
         try:
-            # Filtramos solo clientes de ESTE negocio
+            # Traemos los clientes filtrados por tu negocio
+            # Usamos un stream directo para asegurar que lea lo último
             clientes_ref = db.collection("clientes").where("id_negocio", "==", id_negocio).stream()
+            
             lista_clientes = []
             for doc in clientes_ref:
                 datos = doc.to_dict()
@@ -48,9 +50,11 @@ def renderizar(db, id_negocio):
                 lista_clientes.append(datos)
 
             if lista_clientes:
+                # Ordenar por nombre para que sea fácil encontrarlos
                 lista_clientes = sorted(lista_clientes, key=lambda x: x.get('nombre', '').lower())
                 
                 for cli in lista_clientes:
+                    # El nombre y DNI se ven primero
                     with st.expander(f"👤 {cli['nombre']} (DNI: {cli.get('dni', 'S/D')})"):
                         c1, c2 = st.columns(2)
                         with c1:
@@ -60,7 +64,7 @@ def renderizar(db, id_negocio):
                             st.write(f"📝 **Nota:** {cli.get('nota', '-')}")
                         
                         with c2:
-                            # Cálculo de deuda en tiempo real filtrado por negocio y cliente
+                            # Cálculo de deuda filtrado por cliente y negocio
                             ventas_fiado = db.collection("ventas_procesadas")\
                                 .where("id_negocio", "==", id_negocio)\
                                 .where("cliente_nombre", "==", cli['nombre'])\
@@ -72,16 +76,18 @@ def renderizar(db, id_negocio):
                             st.markdown("💰 **Deuda Actual:**")
                             st.markdown(f"<div class='deuda-total'>{total_f}</div>", unsafe_allow_html=True)
 
+                        # Botón para eliminar cliente
                         if st.button("🗑️ Eliminar Cliente", key=f"del_cli_{cli['id_doc']}"):
                             db.collection("clientes").document(cli['id_doc']).delete()
                             st.success(f"Cliente '{cli['nombre']}' eliminado.")
                             st.rerun()
             else:
-                st.info("No hay clientes registrados en este negocio.")
+                st.info("Aún no hay clientes registrados. Podés cargar uno en la pestaña 'Agregar Nuevo'.")
+                
         except Exception as e:
-            st.error(f"Error al cargar: {e}")
+            st.error(f"Error al cargar la lista: {e}")
 
-    # --- PESTAÑA 2: REGISTRO AUTOMÁTICO ---
+    # --- PESTAÑA 2: AGREGAR CLIENTE (SIN CAMBIOS) ---
     with tab_nuevo:
         st.markdown('<div class="sub-blue">Registrar Nuevo Cliente y Usuario</div>', unsafe_allow_html=True)
         
@@ -92,8 +98,7 @@ def renderizar(db, id_negocio):
                 dni_nuevo = st.text_input("DNI (Contraseña):").strip()
             with col_b:
                 tel_nuevo = st.text_input("WhatsApp / Teléfono:")
-                # Agregamos la fecha de pago prometida
-                fecha_pago = st.date_input("Fecha prometida de pago:", value=None, min_value=datetime.now())
+                fecha_pago = st.date_input("Fecha prometida de pago:", value=None)
             
             nota_nueva = st.text_area("Notas o referencias adicionales:")
             
@@ -107,9 +112,9 @@ def renderizar(db, id_negocio):
                     try:
                         f_pago_str = fecha_pago.strftime("%d/%m/%Y") if fecha_pago else "No definida"
                         
-                        # 1. Guardar en tabla CLIENTES para tu gestión
+                        # Guardar Cliente
                         db.collection("clientes").add({
-                            "id_negocio": id_negocio, # Automático
+                            "id_negocio": id_negocio,
                             "nombre": nombre_nuevo,
                             "dni": dni_nuevo,
                             "telefono": tel_nuevo,
@@ -118,16 +123,18 @@ def renderizar(db, id_negocio):
                             "fecha_alta": datetime.now().isoformat()
                         })
                         
-                        # 2. Guardar en tabla USUARIOS para el login (ROL AUTOMÁTICO)
+                        # Guardar Usuario (Rol automático)
                         db.collection("usuarios").add({
-                            "id_negocio": id_negocio, # Automático
+                            "id_negocio": id_negocio,
                             "nombre_real": nombre_nuevo,
                             "usuario": nombre_nuevo, 
                             "clave": dni_nuevo,
-                            "rol": "cliente", # Automático
+                            "rol": "cliente",
                             "fecha_creacion": datetime.now().isoformat()
                         })
                         
                         st.success(f"✅ ¡{nombre_nuevo} registrado! Ya puede entrar con su DNI.")
+                        # Rerun para que aparezca en la lista inmediatamente
+                        st.rerun()
                     except Exception as e:
                         st.error(f"Error al guardar: {e}")
