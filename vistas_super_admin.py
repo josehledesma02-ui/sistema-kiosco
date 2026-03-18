@@ -5,7 +5,8 @@ from super_admin_modules import (
     gestion_negocios, 
     soporte_tecnico, 
     sugerencias, 
-    alta_negocios
+    alta_negocios,
+    historial_global  # <--- 1. AGREGADO AQUÍ
 )
 
 def mostrar_super_admin(db, ahora):
@@ -14,17 +15,18 @@ def mostrar_super_admin(db, ahora):
     st.markdown("---")
 
     # Menú lateral específico para el Super Admin
-    # Agregamos iconos para que sea más visual y fácil de leer
     menu = [
         "📊 Dashboard Global", 
         "🆕 Alta de Negocio", 
         "🏪 Gestión Agresiva", 
         "🛠️ Soporte & Errores", 
+        "📜 Historial Global",  # <--- 2. AGREGADO AL MENÚ
         "💡 Sugerencias Recibidas"
     ]
     
-    # Este es el selector que ahora se verá oscuro gracias al CSS en app.py
+    # Selector del menú lateral
     choice = st.sidebar.selectbox("Panel de Control", menu)
+
     # Lógica de navegación del Super Admin
     if choice == "📊 Dashboard Global":
         dashboard.mostrar(db)
@@ -38,6 +40,9 @@ def mostrar_super_admin(db, ahora):
         
     elif choice == "🛠️ Soporte & Errores":
         soporte_tecnico.mostrar(db)
+
+    elif choice == "📜 Historial Global": # <--- 3. LÓGICA AGREGADA
+        historial_global.mostrar(db)
         
     elif choice == "💡 Sugerencias Recibidas":
         sugerencias.mostrar(db)
