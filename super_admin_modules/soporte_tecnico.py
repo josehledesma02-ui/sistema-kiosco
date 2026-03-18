@@ -13,7 +13,7 @@ def mostrar(db):
     else:
         try:
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('models/gemini-1.5-flash')
         except Exception as e:
             st.warning(f"⚠️ Error al conectar con la IA: {e}")
             model = None
