@@ -37,7 +37,7 @@ def mostrar(db):
 
             # 3. COMPATIBILIDAD DE FOTOS (Buscamos en todos los nombres posibles)
             # Buscamos en 'links_fotos', 'fotos' o 'urls_fotos'
-            links = rep.get("links_fotos") or rep.get("fotos") or rep.get("urls_fotos") or []
+            links = rep.get("fotos") or rep.get("links_fotos") or rep.get("urls_fotos")
 
             # --- DISEÑO DEL EXPANDER ---
             titulo = f"{emoji_prio} {rep.get('id_negocio', 'S/N').upper()} - {rep.get('tipo', 'Reporte')} ({fecha_str})"
@@ -48,16 +48,17 @@ def mostrar(db):
                 st.info(f"**💬 Mensaje:** {rep.get('mensaje', 'Sin detalle')}")
 
                 # --- MOSTRAR IMÁGENES ---
-                if links and isinstance(links, list):
-                    st.write("🖼️ **Capturas adjuntas:**")
-                    # Usamos columnas para que no ocupen toda la pantalla hacia abajo
-                    cols = st.columns(min(len(links), 3)) 
-                    for idx, link in enumerate(links):
-                        with cols[idx % 3]:
-                            st.image(link, caption=f"Captura {idx+1}", use_container_width=True)
-                            st.markdown(f"[🔍 Ver Original]({link})")
-                else:
-                    st.write("⚪ _Este reporte no incluye imágenes._")
+             if links and isinstance(links, list) and len(links) > 0:
+    st.write("🖼️ **Capturas adjuntas:**")
+    # Mostramos las imágenes una debajo de la otra o en columnas
+    for idx, link in enumerate(links):
+        st.image(link, caption=f"Evidencia {idx+1}", use_container_width=True)
+        st.markdown(f"[🔗 Ver en pantalla completa]({link})")
+    else:
+    # Si entra acá es porque 'links' está vacío o no es una lista
+    st.warning("⚠️ El sistema no detectó imágenes en este reporte.")
+    # Debug para vos (solo lo ves vos):
+    # st.write(f"Contenido de fotos: {links}")
 
                 st.divider()
                 
