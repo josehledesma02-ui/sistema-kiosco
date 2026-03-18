@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 def mostrar_cliente(db, id_negocio, nombre_cliente):
-    # 1. BUSCAR DATOS DEL CLIENTE (Ficha personal)
+    # 1. BÚSQUEDA DE DATOS (Ficha y Ventas)
     cliente_data = None
     clientes_ref = db.collection("clientes").where("id_negocio", "==", id_negocio).stream()
     for doc in clientes_ref:
@@ -11,7 +11,6 @@ def mostrar_cliente(db, id_negocio, nombre_cliente):
             cliente_data = d
             break
 
-    # 2. OBTENER VENTAS FIADAS (Detalle de compras)
     ventas_ref = db.collection("ventas_procesadas")\
         .where("id_negocio", "==", id_negocio)\
         .where("cliente_nombre", "==", nombre_cliente)\
@@ -23,51 +22,60 @@ def mostrar_cliente(db, id_negocio, nombre_cliente):
     for v in ventas_ref:
         v_dict = v.to_dict()
         total_deuda += v_dict.get("total", 0)
-        # Guardamos los productos para el desglose
+        
+        # Extraemos fecha y hora
+        fecha_completa = v_dict.get("fecha", "S/F") # Asumimos formato "DD/MM/YYYY HH:MM"
+        
         productos = v_dict.get("productos", [])
-        fecha_venda = v_dict.get("fecha", "S/F")
         for p in productos:
+            cant = p.get("cantidad", 0)
+            pu = p.get("precio", 0)
+            sub = p.get("subtotal", cant * pu)
+            
             lista_compras.append({
-                "Fecha": fecha_venda,
-                "Producto": p.get("nombre"),
-                "Cant.": p.get("cantidad"),
-                "Precio Unit.": f"${p.get('precio'):,.2f}",
-                "Subtotal": p.get("subtotal")
+                "📅 Fecha/Hora": fecha_completa,
+                "📦 Producto": p.get("nombre"),
+                "🔢 Cant.": cant,
+                "💰 P. Unit": f"${pu:,.2f}",
+                "💵 Subtotal": sub
             })
 
     # --- DISEÑO DE LA PANTALLA ---
     st.markdown(f"# 👋 ¡Hola, {nombre_cliente}!")
-    st.write("---")
+    
+    # Deuda con fuente GRANDE y GRUESA
+    st.markdown(f"""
+        <div style="background-color: #e1f5fe; padding: 20px; border-radius: 10px; border-left: 8px solid #0288d1;">
+            <p style="margin-bottom: 0; color: #0288d1; font-weight: bold;">TU DEUDA TOTAL</p>
+            <h1 style="margin-top: 0; font-size: 60px; font-weight: 900; color: #01579b;">
+                ${total_deuda:,.2f}
+            </h1>
+        </div>
+    """, unsafe_allow_html=True)
 
-    # Fila de métricas principales
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("Tu Deuda Total", f"${total_deuda:,.2f}")
-    with col2:
-        fecha_pago = cliente_data.get("fecha_pago", "No pactada") if cliente_data else "N/A"
-        st.info(f"📅 **Tu próxima fecha de pago:** {fecha_pago}")
+    st.write("") # Espacio
+    
+    fecha_pago = cliente_data.get("fecha_pago", "No pactada") if cliente_data else "N/A"
+    st.info(f"📅 **Tu próxima fecha de pago pactada:** {fecha_pago}")
 
-    # 3. LÓGICA DE NOTIFICACIÓN DE SALDO PENDIENTE
-    # Solo se muestra si la deuda es mayor a 0 y queremos alertar algo específico
-    if total_deuda > 0:
-        # Aquí podrías comparar fechas, por ahora lo dejamos como aviso de cortesía
-        st.warning("Recordá que podés abonar tu cuenta en el kiosco en cualquier momento.")
-
-    # 4. DETALLE DE COMPRAS (HISTORIAL COMPLETO)
-    st.subheader("🛒 Detalle de tus compras pendientes")
+    # 4. TABLA DETALLADA
+    st.markdown("### 🛒 Detalle de tus compras pendientes")
     
     if lista_compras:
         df = pd.DataFrame(lista_compras)
-        # Formateamos la tabla para que se vea profesional
+        
+        # Mostramos la tabla con diseño limpio
         st.dataframe(
-            df, 
+            df,
             column_config={
-                "Subtotal": st.column_config.NumberColumn(format="$%.2f"),
+                "💵 Subtotal": st.column_config.NumberColumn(format="$%.2f"),
+                "💰 P. Unit": st.column_config.TextColumn(), # Ya tiene el signo $ arriba
             },
             hide_index=True,
             use_container_width=True
         )
     else:
-        st.success("🎉 ¡Excelente! No tenés compras pendientes de pago.")
+        st.success("🎉 ¡No tenés compras pendientes de pago!")
 
-    # Nota: El botón de cerrar sesión se eliminó de aquí porque ya está en el Sidebar.
+    st.divider()
+    st.caption("Si tenés dudas con algún cargo, por favor consultanos en el local.")
