@@ -7,18 +7,13 @@ import vistas_cliente
 # ==========================================
 # 1. CONFIGURACIÓN VISUAL PRO (UI/UX)
 # ==========================================
-st.set_page_config(
-    page_title="JL Gestión Pro",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
 # Estilos CSS
 st.markdown("""
     <style>
         .main { background-color: #f8f9fa; }
         [data-testid="stMetricValue"] { font-size: 1.8rem !important; color: #007bff; }
+        
+        /* Botones generales */
         .stButton>button {
             border-radius: 8px;
             height: 3em;
@@ -30,11 +25,31 @@ st.markdown("""
             color: #007bff;
             transform: translateY(-2px);
         }
+
+        /* Sidebar Pro */
         [data-testid="stSidebar"] {
             background-image: linear-gradient(#2e3b4e, #1c2531);
             color: white;
         }
         [data-testid="stSidebar"] * { color: white !important; }
+
+        /* ========================================== */
+        /* FIX: BOTÓN CERRAR SESIÓN (Sin fondo blanco) */
+        /* ========================================== */
+        /* Seleccionamos específicamente el botón dentro del sidebar */
+        section[data-testid="stSidebar"] div.stButton > button {
+            background-color: rgba(255, 255, 255, 0.1) !important; /* Fondo traslúcido */
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            color: white !important;
+            width: 100%;
+        }
+
+        section[data-testid="stSidebar"] div.stButton > button:hover {
+            background-color: #ff4b4b !important; /* Rojo al pasar el mouse */
+            border: none !important;
+            color: white !important;
+            transform: scale(1.02);
+        }
     </style>
     """, unsafe_allow_html=True)
 
