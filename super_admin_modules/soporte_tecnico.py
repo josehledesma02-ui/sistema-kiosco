@@ -3,7 +3,7 @@ from datetime import datetime
 
 def mostrar(db):
     st.subheader("📩 Bandeja de Entrada: Soporte Técnico")
-    st.info("Aquí solo verás los reportes que aún no han sido solucionados.")
+    st.info("")
     
     try:
         # Filtramos solo por 'pendiente'
