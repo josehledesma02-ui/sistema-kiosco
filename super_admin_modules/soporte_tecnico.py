@@ -11,9 +11,13 @@ def mostrar(db):
         model = None
     else:
         try:
+            # Forzamos la configuración básica
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            # Usamos este nombre que es el "puntero" universal actualmente
-            model = genai.GenerativeModel('gemini-1.5-flash-latest') 
+            
+            # SOLUCIÓN CLAVE: Especificamos el modelo sin prefijos raros
+            # y dejamos que la librería decida la mejor ruta v1
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            
         except Exception as e:
             st.warning(f"⚠️ Error al conectar con la IA: {e}")
             model = None
