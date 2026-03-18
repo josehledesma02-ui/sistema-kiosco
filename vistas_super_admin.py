@@ -1,5 +1,5 @@
 import streamlit as st
-from super_admin_modules import dashboard, gestion_negocios, soporte_tecnico, sugerencias
+from super_admin_modules import dashboard, Alta de Negocio, gestion_negocios, soporte_tecnico, sugerencias
 
 def mostrar_super_admin(db, ahora):
     st.title("⚡ SISTEMA MAESTRO (José Admin)")
@@ -19,3 +19,6 @@ def mostrar_super_admin(db, ahora):
         
     elif choice == "💡 Sugerencias Recibidas":
         sugerencias.mostrar(db)
+
+    elif choice == "🆕 Alta de Negocio":
+        alta_negocios.mostrar(db, ahora)
