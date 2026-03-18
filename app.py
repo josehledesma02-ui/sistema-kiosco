@@ -84,7 +84,7 @@ if not st.session_state['autenticado']:
                 d = user_ref.to_dict()
                 st.session_state.update({
                     'autenticado': True, 'usuario': u_input, 
-                    'rol': d.get('rol').lower().strip(), # Normalizamos el rol
+                    'rol': str(d.get('rol')).strip().lower(),
                     'id_negocio': d.get('id_negocio'), 'nombre_real': d.get('nombre'),
                     'id_usuario': u_input
                 })
@@ -102,15 +102,15 @@ else:
     with st.sidebar:
         if os.path.exists(IMG_SIDEBAR): st.image(IMG_SIDEBAR, width=150)
         st.write(f"👤 **{vendedor_nom}**")
-        st.write(f"🔑 Rol: {rol_actual}")
+        st.write(f"🔑 Rol detectado: **{rol_actual}**")
         if st.button("🔴 Cerrar Sesión", use_container_width=True): 
             for key in list(st.session_state.keys()): del st.session_state[key]
             st.rerun()
 
     mostrar_titulo()
 
-    # VISTA PARA EL DUEÑO
-    if "dueño" in rol_actual or "dueño" == rol_actual:
+    # --- CAMBIO CLAVE AQUÍ: BUSCAMOS 'negocio' SEGÚN TU FIREBASE ---
+    if rol_actual == "negocio":
         tabs = st.tabs(["🛒 Ventas", "📉 Gastos", "📜 Historial", "👥 Clientes"])
 
         with tabs[0]: # VENTAS
@@ -216,6 +216,7 @@ else:
                                 db.collection("pagos_clientes").add({"cliente_id": c.id, "monto": m_entega, "fecha": datetime.now(), "fecha_str": datetime.now().strftime("%d/%m/%Y"), "hora_str": datetime.now().strftime("%H:%M"), "id_negocio": negocio_id})
                                 st.rerun()
                         st.divider()
+                        # MOVIMIENTOS DETALLADOS
                         movs = []
                         for v in v_f:
                             vd = v.to_dict()
@@ -227,7 +228,7 @@ else:
                         for m in sorted(movs, key=lambda x: x['dt'], reverse=True):
                             st.write(m['t']); st.caption(m['s'])
 
-    # VISTA PARA EL CLIENTE
+    # SI ES CLIENTE
     elif rol_actual == "cliente":
         c_id = st.session_state['usuario']
         v_f = list(db.collection("ventas_procesadas").where("cliente_id", "==", c_id).where("metodo", "==", "Fiado").stream())
