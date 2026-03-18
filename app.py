@@ -107,7 +107,10 @@ else:
     mostrar_titulo()
     tabs = st.tabs(["🛒 Ventas", "📉 Gastos", "📜 Historial", "👥 Clientes"])
 
-    with tabs[0]: # VENTAS (BLOQUEADA POR PEDIDO DEL USUARIO)
+    # ------------------------------------------
+    # PESTAÑA 1: VENTAS (BLOQUEADA POR PEDIDO)
+    # ------------------------------------------
+    with tabs[0]:
         col_izq, col_der = st.columns([1.6, 1])
         with col_izq:
             busqueda = st.text_input("🔍 Buscar producto...", placeholder="Ej: Aceite...")
@@ -163,7 +166,32 @@ else:
                     })
                     st.session_state.carrito = []; st.success("Venta Exitosa"); st.rerun()
 
-    with tabs[3]: # PESTAÑA CLIENTES (REHECHA TOTALMENTE)
+    # ------------------------------------------
+    # PESTAÑA 2: GASTOS
+    # ------------------------------------------
+    with tabs[1]:
+        st.subheader("📉 Gastos")
+        with st.form("g_form"):
+            m = st.number_input("Monto", 0.0); d = st.text_input("Detalle")
+            if st.form_submit_button("Guardar Gasto"):
+                db.collection("gastos").add({"monto": m, "detalle": d, "id_negocio": negocio_id, "fecha": datetime.now()})
+                st.success("Gasto guardado")
+
+    # ------------------------------------------
+    # PESTAÑA 3: HISTORIAL
+    # ------------------------------------------
+    with tabs[2]:
+        st.subheader("📜 Historial de Ventas")
+        h_ref = db.collection("ventas_procesadas").where("id_negocio", "==", negocio_id).order_by("fecha_completa", direction=firestore.Query.DESCENDING).limit(15).stream()
+        for h in h_ref:
+            hd = h.to_dict()
+            with st.expander(f"{hd.get('fecha_str', '')} | {hd.get('cliente', '')} | ${hd.get('total', 0):,.2f}"):
+                for i in hd.get('items', []): st.write(f"- {i['cantidad']}x {i['nombre']}")
+
+    # ------------------------------------------
+    # PESTAÑA 4: CLIENTES (GESTIÓN DE CUENTAS)
+    # ------------------------------------------
+    with tabs[3]:
         col_reg, col_list = st.columns([1, 2.5])
         with col_reg:
             st.subheader("➕ Nuevo Cliente")
@@ -178,9 +206,9 @@ else:
                         db.collection("usuarios").document(u_id).set({
                             "nombre": nom_c, "password": dni_c, "rol": "cliente",
                             "id_negocio": negocio_id, "dni": dni_c, "tel": tel_c,
-                            "acuerdo": f_pago # Nombre unificado
+                            "promesa_pago": f_pago
                         })
-                        st.success(f"✅ Cliente guardado"); st.rerun()
+                        st.success("✅ Cliente guardado"); st.rerun()
 
         with col_list:
             st.subheader("👥 Cuentas Corrientes")
@@ -190,7 +218,7 @@ else:
                 cd = c.to_dict()
                 c_id = c.id
                 
-                # Obtener Ventas Fiadas y Pagos
+                # Cálculo de Deuda
                 ventas_f = list(db.collection("ventas_procesadas").where("cliente_id", "==", c_id).where("metodo", "==", "Fiado").stream())
                 pagos_f = list(db.collection("pagos_clientes").where("cliente_id", "==", c_id).stream())
                 
@@ -198,18 +226,16 @@ else:
                 total_pagos = sum(p.to_dict().get('monto', 0) for p in pagos_f)
                 saldo_pendiente = total_deuda - total_pagos
                 
-                # Encabezado minimizado
                 with st.expander(f"👤 {cd.get('nombre')} | Saldo: ${saldo_pendiente:,.2f}"):
-                    # Información de contacto y Acuerdo
                     c_info, c_pago_form = st.columns([1.5, 1])
                     with c_info:
                         st.markdown(f"**DNI:** {cd.get('dni', '---')} | **WA:** {cd.get('tel', '---')}")
-                        # Mostramos el acuerdo buscando ambos nombres de campo por si acaso
-                        acuerdo_val = cd.get('acuerdo') or cd.get('fecha_acuerdo_pago') or "No definido"
-                        st.markdown(f"**📅 Acordó pagar:** {acuerdo_val}")
+                        # BUSCAMOS EL CAMPO PROMESA_PAGO
+                        promesa = cd.get('promesa_pago') or "No definido"
+                        st.markdown(f"**📅 Acordó pagar:** :blue[{promesa}]")
                     
                     with c_pago_form:
-                        monto_abono = st.number_input("Ingresar monto de pago $", 0.0, key=f"pago_{c_id}")
+                        monto_abono = st.number_input("Ingresar entrega $", 0.0, key=f"pago_{c_id}")
                         if st.button("Registrar Entrega", key=f"btn_pago_{c_id}", use_container_width=True):
                             if monto_abono > 0:
                                 ah = datetime.now()
@@ -218,51 +244,28 @@ else:
                                     "fecha_str": ah.strftime("%d/%m/%Y"), "hora_str": ah.strftime("%H:%M"),
                                     "id_negocio": negocio_id
                                 })
-                                st.success(f"Registrado: ${monto_abono}"); st.rerun()
+                                st.success("Pago registrado"); st.rerun()
 
                     st.divider()
                     st.markdown("#### 📜 Detalle de la Cuenta (Movimientos)")
-                    
-                    # Armamos la lista para mostrar
                     movs = []
                     for v in ventas_f:
                         vd = v.to_dict()
-                        items_str = ", ".join([f"{i['cantidad']}x {i['nombre']}" for i in vd.get('items', [])])
+                        it_list = ", ".join([f"{i['cantidad']}x {i['nombre']}" for i in vd.get('items', [])])
                         movs.append({
-                            "fecha_dt": vd.get('fecha_completa', datetime.now()),
+                            "fecha_dt": vd.get('fecha_completa'),
                             "texto": f"🔴 {vd.get('fecha_str')} {vd.get('hora_str')} - **COMPRA**: ${vd['total']:,.2f}",
-                            "sub": f"Llevó: {items_str}"
+                            "sub": f"Productos: {it_list}"
                         })
                     for p in pagos_f:
                         pd = p.to_dict()
                         movs.append({
-                            "fecha_dt": pd.get('fecha', datetime.now()),
+                            "fecha_dt": pd.get('fecha'),
                             "texto": f"🟢 {pd.get('fecha_str')} {pd.get('hora_str')} - **PAGO**: ${pd['monto']:,.2f}",
                             "sub": "Entrega de efectivo"
                         })
                     
-                    # Ordenar por fecha real para que el detalle sea exacto
-                    movs_sorted = sorted(movs, key=lambda x: x['fecha_dt'], reverse=True)
-                    
-                    if movs_sorted:
-                        for m in movs_sorted:
-                            st.write(m['texto'])
-                            st.caption(m['sub'])
-                    else:
-                        st.info("No hay movimientos en esta cuenta.")
-
-    with tabs[1]: # GASTOS
-        st.subheader("Gastos")
-        with st.form("g_form"):
-            m = st.number_input("Monto", 0.0); d = st.text_input("Detalle")
-            if st.form_submit_button("Guardar"):
-                db.collection("gastos").add({"monto": m, "detalle": d, "id_negocio": negocio_id, "fecha": datetime.now()})
-                st.success("Gasto guardado")
-
-    with tabs[2]: # HISTORIAL
-        st.subheader("Historial General")
-        h_ref = db.collection("ventas_procesadas").where("id_negocio", "==", negocio_id).order_by("fecha_completa", direction=firestore.Query.DESCENDING).limit(15).stream()
-        for h in h_ref:
-            hd = h.to_dict()
-            with st.expander(f"{hd['fecha_str']} | {hd['cliente']} | ${hd['total']:,.2f}"):
-                for i in hd['items']: st.write(f"- {i['cantidad']}x {i['nombre']}")
+                    movs_sorted = sorted(movs, key=lambda x: x['fecha_dt'] if x['fecha_dt'] else datetime.min, reverse=True)
+                    for m in movs_sorted:
+                        st.write(m['texto'])
+                        st.caption(m['sub'])
