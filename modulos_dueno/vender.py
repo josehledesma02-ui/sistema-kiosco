@@ -3,6 +3,15 @@ import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 
 def renderizar(db, id_negocio, ahora_ar, nombre_u):
+    # Estilo personalizado para agrandar la letra de las tablas y textos
+    st.markdown("""
+        <style>
+            .stTable td, .stTable th { font-size: 18px !important; }
+            .big-font { font-size: 20px !important; font-weight: bold; }
+            .total-font { font-size: 30px !important; color: #1E88E5; font-weight: bold; }
+        </style>
+    """, unsafe_allow_html=True)
+
     st.header("🛒 Punto de Venta")
     
     url_sheet = "https://docs.google.com/spreadsheets/d/1-ay_xIqYItwOaXe80VUsEmh4gsANrk9PH72aZcUD54g/edit?usp=sharing"
@@ -10,7 +19,6 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         df_raw = conn.read(spreadsheet=url_sheet, ttl=60, skiprows=1, usecols=[0, 2])
-        
         df_p = df_raw.copy()
         df_p.columns = ["PRODUCTOS", "PRECIO"]
         df_p = df_p.dropna(subset=["PRODUCTOS"])
@@ -20,14 +28,11 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
             s = str(valor).strip().replace('$', '').replace(',', '')
             try: return float(s)
             except: return 0.0
-
         df_p['PRECIO'] = df_p['PRECIO'].apply(limpiar_precio)
-        
     except Exception as e:
         st.error(f"❌ Error al leer Excel: {e}")
         return
 
-    # --- DISEÑO DE COLUMNAS ---
     col_izq, col_der = st.columns([1.3, 1])
 
     if 'carrito' not in st.session_state:
@@ -40,8 +45,8 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
         
         if seleccion:
             precio_u = df_p[df_p['PRODUCTOS'] == seleccion]['PRECIO'].values[0]
-            precio_mostrar = f"${precio_u:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-            st.markdown(f"### Precio: **{precio_mostrar}**")
+            precio_f = f"${precio_u:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+            st.markdown(f"<p class='big-font'>Precio Unitario: {precio_f}</p>", unsafe_allow_html=True)
             
             cant = st.number_input("Cantidad:", min_value=1, value=1, step=1)
             
@@ -54,60 +59,68 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
                 })
                 st.rerun()
         
-        # --- TABLA DEL CARRITO (MOVIDA AQUÍ ABAJO) ---
         st.divider()
         st.subheader("📋 Detalle de la compra")
         if st.session_state.carrito:
-            df_c = pd.DataFrame(st.session_state.carrito)
-            st.dataframe(df_c[['nombre', 'cantidad', 'subtotal']], use_container_width=True, hide_index=True)
-            if st.button("🗑️ Vaciar Carrito"):
+            # Mostramos cada ítem con opciones de edición
+            for i, item in enumerate(st.session_state.carrito):
+                c1, c2, c3, c4 = st.columns([3, 1, 1.5, 0.5])
+                with c1:
+                    st.markdown(f"**{item['nombre']}**")
+                with c2:
+                    nueva_cant = st.number_input(f"Cant.", min_value=1, value=item['cantidad'], key=f"cant_{i}")
+                    if nueva_cant != item['cantidad']:
+                        st.session_state.carrito[i]['cantidad'] = nueva_cant
+                        st.session_state.carrito[i]['subtotal'] = item['precio'] * nueva_cant
+                        st.rerun()
+                with c3:
+                    sub_f = f"${item['subtotal']:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+                    st.markdown(f"<p style='text-align:right'>{sub_f}</p>", unsafe_allow_html=True)
+                with c4:
+                    if st.button("❌", key=f"del_{i}"):
+                        st.session_state.carrito.pop(i)
+                        st.rerun()
+            
+            if st.button("🗑️ Vaciar Carrito Completo"):
                 st.session_state.carrito = []
                 st.rerun()
         else:
             st.info("No hay productos en el ticket.")
 
     with col_der:
-        st.subheader("💰 Finalizar Venta")
+        st.subheader("💰 Resumen y Pago")
         if st.session_state.carrito:
-            df_c = pd.DataFrame(st.session_state.carrito)
-            suma_productos = df_c['subtotal'].sum()
+            suma_productos = sum(item['subtotal'] for item in st.session_state.carrito)
             
-            # --- SECCIÓN DE DESCUENTOS / RECARGOS (LIMPIA) ---
             c_desc, c_rec = st.columns(2)
             with c_desc:
                 porcentaje_desc = st.number_input("Descuento %", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
             with c_rec:
                 porcentaje_rec = st.number_input("Recargo %", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
             
-            # Cálculos
             monto_descuento = (suma_productos * (porcentaje_desc / 100))
             monto_recargo = (suma_productos * (porcentaje_rec / 100))
-            
             total_final = suma_productos - monto_descuento + monto_recargo
             
-            # Mostrar avisos de ajustes si existen
-            if monto_descuento > 0:
-                st.write(f"📉 Descuento aplicado: -${monto_descuento:,.2f}")
-            if monto_recargo > 0:
-                st.write(f"📈 Recargo aplicado: +${monto_recargo:,.2f}")
+            if monto_descuento > 0: st.write(f"📉 Descuento: -${monto_descuento:,.2f}")
+            if monto_recargo > 0: st.write(f"📈 Recargo: +${monto_recargo:,.2f}")
 
-            total_mostrar = f"${total_final:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-            st.markdown(f"## TOTAL: {total_mostrar}")
+            total_f = f"${total_final:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+            st.markdown(f"<p class='total-font'>TOTAL: {total_f}</p>", unsafe_allow_html=True)
             
-            # --- MEDIOS DE PAGO ---
             metodo = st.selectbox("Medio de Pago:", ["Efectivo", "Débito", "Crédito", "Transferencia", "Fiado"])
             
             detalles_pago = ""
             if metodo == "Transferencia":
-                detalles_pago = st.text_input("¿A qué cuenta transfirieron?", placeholder="Ej: MP Jose, Galicia, etc.")
+                detalles_pago = st.text_input("Cuenta destino:", placeholder="Ej: Mercado Pago")
             
             cliente = "Consumidor Final"
             if metodo == "Fiado":
-                cliente = st.text_input("Nombre/DNI del Cliente (Obligatorio):")
+                cliente = st.text_input("Nombre Cliente:")
 
-            if st.button("🚀 CONFIRMAR VENTA", type="primary", use_container_width=True):
+            if st.button("✅ CONFIRMAR VENTA", type="primary", use_container_width=True):
                 if metodo == "Fiado" and not cliente:
-                    st.warning("⚠️ Debes ingresar el nombre del cliente para fiar.")
+                    st.warning("⚠️ El nombre es obligatorio para fiar.")
                 else:
                     venta_data = {
                         "id_negocio": id_negocio,
@@ -126,11 +139,8 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
                     }
                     db.collection("ventas_procesadas").add(venta_data)
                     st.session_state.carrito = []
-                    st.success("✅ ¡Venta guardada!")
+                    st.success("¡Venta guardada!")
                     st.balloons()
                     st.rerun()
         else:
             st.write("Esperando productos...")
-
-    st.divider()
-    st.caption(f"Vendedor: {nombre_u} | ID: {id_negocio}")
