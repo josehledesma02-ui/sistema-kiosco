@@ -16,10 +16,21 @@ def mostrar(db):
             
             # --- DISEÑO PROFESIONAL ---
             # (El código de fecha, prioridad y fotos que ya tenemos funcionando...)
-            fecha_valor = rep.get("fecha", "")
+            # --- PROCESAMIENTO DE PRIORIDAD (SEMÁFORO COMPLETO) ---
             prioridad = rep.get("prioridad", "Baja")
-            emoji_prio = "🔴" if "Urgente" in prioridad else "🟢"
-            titulo = f"{emoji_prio} {rep.get('id_negocio', '').upper()} - {rep.get('tipo', 'Error')}"
+            
+            # Asignamos el emoji según lo que eligió el dueño
+            if "Urgente" in prioridad:
+                emoji_prio = "🔴"
+            elif "Alta" in prioridad:
+                emoji_prio = "🟠"
+            elif "Media" in prioridad:
+                emoji_prio = "🟡"
+            else:
+                emoji_prio = "🟢"
+
+            # El título ahora mostrará el color correspondiente de entrada
+            titulo = f"{emoji_prio} {rep.get('id_negocio', '').upper()} - {rep.get('tipo', 'Reporte')} ({fecha_str})"
 
             with st.expander(titulo):
                 st.write(f"**⏰ Fecha:** {fecha_valor[:16]}")
