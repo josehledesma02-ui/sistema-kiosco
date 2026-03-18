@@ -54,9 +54,26 @@ def mostrar(db):
                             st.image(link, use_container_width=True)
                             st.markdown(f"[🔗 Ver]({link})")
 
+                # --- 🤖 ASISTENTE DE IA PARA SOLUCIÓN ---
                 st.divider()
+                st.markdown("### 🤖 Consultar a Asistente de IA")
+                
+                # Caja de chat para que hables conmigo sobre ESTE error específico
+                consulta_ia = st.text_input("¿En qué te ayudo con este reporte, José?", 
+                                            placeholder="Ej: ¿Cómo arreglo este error de CSS? o ¿Qué pudo fallar aquí?",
+                                            key=f"ia_query_{id_doc}")
+
+                if consulta_ia:
+                    with st.spinner("Analizando reporte..."):
+                        # Aquí es donde yo entro en acción. 
+                        # Simulamos la respuesta técnica basada en el reporte
+                        st.chat_message("assistant").write(f"**Análisis de JL-IA:** José, analizando el reporte de {rep.get('id_negocio')}, el problema de '{rep.get('tipo')}' suele deberse a un conflicto en la base de datos. Te sugiero revisar el campo 'stock' en Firebase.")
+                        st.caption("Nota: Para que esto sea automático, conectaremos tu API Key en el próximo paso.")
                 c1, c2 = st.columns(2)
                 with c1:
+                    
+                    st.divider()
+                    
                     if st.button("✅ Resolver y Archivar", key=f"res_{id_doc}_{i}", use_container_width=True):
                         db.collection("reportes_error").document(id_doc).update({
                             "estado": "resuelto",
