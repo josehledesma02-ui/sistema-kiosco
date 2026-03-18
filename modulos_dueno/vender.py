@@ -10,26 +10,34 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         
-        # Leemos desde la fila 2 (skiprows=1) y columnas A y C (usecols=[0, 2])
+        # Leemos: Fila 2 como cabecera (skiprows=1) y columnas A y C (0 y 2)
         df_raw = conn.read(spreadsheet=url_sheet, ttl=60, skiprows=1, usecols=[0, 2])
         
         df_p = df_raw.copy()
         df_p.columns = ["PRODUCTOS", "PRECIO"]
         df_p = df_p.dropna(subset=["PRODUCTOS"])
 
-        # --- CORRECCIÓN DE FORMATO AMERICANO (1,582.00 -> 1582.0) ---
-        # 1. Convertimos a string por seguridad
-        df_p['PRECIO'] = df_p['PRECIO'].astype(str)
-        # 2. Quitamos la coma de los miles
-        df_p['PRECIO'] = df_p['PRECIO'].str.replace(',', '', regex=False)
-        # 3. Lo convertimos a número (el punto decimal lo entiende Python nativamente)
-        df_p['PRECIO'] = pd.to_numeric(df_p['PRECIO'], errors='coerce').fillna(0)
+        # --- LIMPIEZA PROFUNDA DE PRECIOS ---
+        def limpiar_precio(valor):
+            if pd.isna(valor): return 0.0
+            s = str(valor).strip()
+            # 1. Quitamos el símbolo $ si lo tiene
+            s = s.replace('$', '')
+            # 2. Quitamos la coma (separador de miles americano)
+            s = s.replace(',', '')
+            # 3. Ahora que queda "1582.00", lo pasamos a número
+            try:
+                return float(s)
+            except:
+                return 0.0
+
+        df_p['PRECIO'] = df_p['PRECIO'].apply(limpiar_precio)
         
     except Exception as e:
         st.error(f"❌ Error al leer Excel: {e}")
         return
 
-    # --- RESTO DEL CÓDIGO DE INTERFAZ (IGUAL AL ANTERIOR) ---
+    # --- INTERFAZ DE VENTA ---
     col_izq, col_der = st.columns([1.5, 1])
 
     if 'carrito' not in st.session_state:
@@ -41,9 +49,12 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
         seleccion = st.selectbox("Elegí un producto:", [""] + lista_nombres)
         
         if seleccion:
+            # Buscamos el precio convertido
             precio_u = df_p[df_p['PRODUCTOS'] == seleccion]['PRECIO'].values[0]
-            # Mostramos con formato local: $1.582,00
-            st.markdown(f"### Precio: **${precio_u:,.2f}**".replace(",", "v").replace(".", ",").replace("v", "."))
+            
+            # Mostramos en pantalla con formato humano (Argentina)
+            precio_mostrar = f"${precio_u:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+            st.markdown(f"### Precio: **{precio_mostrar}**")
             
             cant = st.number_input("Cantidad:", min_value=1, value=1, step=1)
             
@@ -60,17 +71,17 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
         st.subheader("🧾 Ticket")
         if st.session_state.carrito:
             df_c = pd.DataFrame(st.session_state.carrito)
+            # Mostramos la tabla del carrito
             st.table(df_c[['nombre', 'cantidad', 'subtotal']])
             
             total_final = df_c['subtotal'].sum()
-            # Formato de moneda para Argentina en el Total
-            total_ar = f"${total_final:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-            st.markdown(f"## TOTAL: {total_ar}")
+            total_mostrar = f"${total_final:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+            st.markdown(f"## TOTAL: {total_mostrar}")
             
             metodo = st.selectbox("Pago:", ["Efectivo", "Transferencia", "Fiado"])
             cliente = st.text_input("Nombre/DNI Cliente:") if metodo == "Fiado" else "Consumidor Final"
 
-            if st.button("🚀 FINALIZAR", type="primary", use_container_width=True):
+            if st.button("🚀 FINALIZAR VENTA", type="primary", use_container_width=True):
                 venta_data = {
                     "id_negocio": id_negocio,
                     "vendedor": nombre_u,
@@ -84,10 +95,10 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
                 }
                 db.collection("ventas_procesadas").add(venta_data)
                 st.session_state.carrito = []
-                st.success("Venta Guardada")
+                st.success("✅ Venta Guardada")
                 st.rerun()
             
-            if st.button("🗑️ Vaciar"):
+            if st.button("🗑️ Vaciar Carrito"):
                 st.session_state.carrito = []
                 st.rerun()
         else:
