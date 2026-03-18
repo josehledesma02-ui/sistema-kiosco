@@ -89,4 +89,4 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
             st.info("Carrito vacío")
 
     st.divider()
-    st.caption("Configurado para leer Productos (Col A) y Precios (Col C) desde la fila 2.")
+    st.caption("")
