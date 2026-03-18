@@ -87,6 +87,3 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
                 st.rerun()
         else:
             st.info("Carrito vacío")
-
-    st.divider()
-    st.caption("")
