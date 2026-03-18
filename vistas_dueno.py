@@ -5,28 +5,28 @@ def mostrar_dueno(db, id_negocio, ahora_ar, nombre_u):
     # 1. Título principal
     st.title(f"🏬 Gestión Pro: {id_negocio.upper()}")
     
-    # 2. TUS PESTAÑAS (Respetando tus nombres de funciones originales)
+    # 2. TUS PESTAÑAS (Con los nombres de función corregidos)
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "💰 Vender", "📉 Gastos", "📜 Historial", "👥 Clientes", "📊 Estadísticas"
     ])
     
     with tab1:
-        # Aquí cambiamos 'vender.mostrar_vender' por 'vender.vender'
-        vender.vender(db, id_negocio, ahora_ar)
+        # En el archivo vender.py, la función suele llamarse mostrar_vender
+        vender.mostrar_vender(db, id_negocio, ahora_ar)
     
     with tab2:
-        gastos.gastos(db, id_negocio, ahora_ar)
+        gastos.mostrar_gastos(db, id_negocio, ahora_ar)
         
     with tab3:
-        historial.historial(db, id_negocio)
+        historial.mostrar_historial(db, id_negocio)
         
     with tab4:
-        clientes.clientes(db, id_negocio)
+        clientes.mostrar_clientes(db, id_negocio)
         
     with tab5:
-        estadisticas.estadisticas(db, id_negocio)
+        estadisticas.mostrar_estadisticas(db, id_negocio)
 
-    # 3. SECCIÓN DE SOPORTE (Al final de todo)
+    # 3. SECCIÓN DE SOPORTE (Al final de la página)
     st.markdown("---")
     with st.expander("🆘 ¿Tenés algún problema o duda? Reportalo aquí"):
         st.subheader("📩 Centro de Reportes")
