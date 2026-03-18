@@ -35,11 +35,7 @@ def mostrar(db):
             elif "Media" in prioridad: emoji_prio = "🟡"
             else: emoji_prio = "🟢"
 
-            # 3. COMPATIBILIDAD DE FOTOS (Buscamos en todos los nombres posibles)
-            # Buscamos en 'links_fotos', 'fotos' o 'urls_fotos'
-            links = rep.get("fotos") or rep.get("links_fotos") or rep.get("urls_fotos")
-
-            # --- DISEÑO DEL EXPANDER ---
+      # --- DISEÑO DEL EXPANDER ---
             titulo = f"{emoji_prio} {rep.get('id_negocio', 'S/N').upper()} - {rep.get('tipo', 'Reporte')} ({fecha_str})"
             
             with st.expander(titulo):
@@ -47,21 +43,30 @@ def mostrar(db):
                 st.write(f"**🚨 Prioridad:** {prioridad}")
                 st.info(f"**💬 Mensaje:** {rep.get('mensaje', 'Sin detalle')}")
 
-                # --- MOSTRAR IMÁGENES ---
-             if links and isinstance(links, list) and len(links) > 0:
-    st.write("🖼️ **Capturas adjuntas:**")
-    # Mostramos las imágenes una debajo de la otra o en columnas
-    for idx, link in enumerate(links):
-        st.image(link, caption=f"Evidencia {idx+1}", use_container_width=True)
-        st.markdown(f"[🔗 Ver en pantalla completa]({link})")
-    else:
-    # Si entra acá es porque 'links' está vacío o no es una lista
-    st.warning("⚠️ El sistema no detectó imágenes en este reporte.")
-    # Debug para vos (solo lo ves vos):
-    # st.write(f"Contenido de fotos: {links}")
+                # --- MOSTRAR IMÁGENES (Corregido) ---
+                links = rep.get("fotos") or rep.get("links_fotos") or rep.get("urls_fotos")
+                
+                if links and isinstance(links, list) and len(links) > 0:
+                    st.write("🖼️ **Capturas adjuntas:**")
+                    # Mostramos las imágenes una debajo de la otra
+                    for idx, link in enumerate(links):
+                        st.image(link, caption=f"Evidencia {idx+1}", use_container_width=True)
+                        st.markdown(f"[🔗 Ver en pantalla completa]({link})")
+                else:
+                    st.warning("⚠️ El sistema no detectó imágenes en este reporte.")
 
                 st.divider()
                 
+                # --- BOTONES DE ACCIÓN ---
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("✅ Resolver", key=f"res_{id_doc}"):
+                        db.collection("reportes_error").document(id_doc).update({"estado": "resuelto"})
+                        st.rerun()
+                with c2:
+                    if st.button("🗑️ Eliminar", key=f"del_{id_doc}"):
+                        db.collection("reportes_error").document(id_doc).delete()
+                        st.rerun()
                 # --- BOTONES DE ACCIÓN ---
                 c1, c2 = st.columns(2)
                 with c1:
