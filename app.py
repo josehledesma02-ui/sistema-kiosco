@@ -9,30 +9,37 @@ import vistas_cliente
 # ==========================================
 # Estilos CSS
 st.markdown("""
-    <style>
-        .main { background-color: #f8f9fa; }
-        [data-testid="stMetricValue"] { font-size: 1.8rem !important; color: #007bff; }
-        
-        /* Botones generales */
-        .stButton>button {
+    /* ========================================== */
+        /* FIX: ELIMINAR FONDO BLANCO DEL SELECTBOX  */
+        /* ========================================== */
+        /* Cambia el color del texto y el fondo del selector en el sidebar */
+        div[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            color: white !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
             border-radius: 8px;
-            height: 3em;
-            transition: all 0.3s;
+        }
+
+        /* Cambia el color de la flechita del selector */
+        div[data-testid="stSidebar"] .stSelectbox svg {
+            fill: white !important;
+        }
+
+        /* Cambia el color de la etiqueta "Panel de Control" que está arriba del selector */
+        div[data-testid="stSidebar"] .stSelectbox label {
+            color: #007bff !important; /* Azul como las métricas para que resalte */
             font-weight: bold;
         }
-        .stButton>button:hover {
-            border-color: #007bff;
-            color: #007bff;
-            transform: translateY(-2px);
+
+        /* Estilo para las opciones cuando se despliega la lista */
+        div[data-baseweb="popover"] ul {
+            background-color: #1c2531 !important; /* Fondo oscuro igual al sidebar */
+            color: white !important;
         }
 
-        /* Sidebar Pro */
-        [data-testid="stSidebar"] {
-            background-image: linear-gradient(#2e3b4e, #1c2531);
-            color: white;
+        div[data-baseweb="popover"] li:hover {
+            background-color: #2e3b4e !important; /* Resalte al pasar el mouse */
         }
-        [data-testid="stSidebar"] * { color: white !important; }
-
         /* ========================================== */
         /* FIX: BOTÓN CERRAR SESIÓN (Sin fondo blanco) */
         /* ========================================== */
