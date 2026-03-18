@@ -9,58 +9,51 @@ import vistas_cliente
 # ==========================================
 # Estilos CSS
 st.markdown("""
-    <style>
-        /* ========================================== */
-        /* FIX: ELIMINAR FONDO BLANCO DEL SELECTBOX  */
-        /* ========================================== */
-        /* Fondo y texto del selector principal */
-        div[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div {
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            color: white !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
-            border-radius: 8px;
-        }
+   /* ========================================== */
+/* FIX: COMPONENTES DEL SIDEBAR PARA MODO OSCURO */
+/* ========================================== */
 
-        /* Color de la flechita */
-        div[data-testid="stSidebar"] .stSelectbox svg {
-            fill: white !important;
-        }
+/* 1. Botón 'Cerrar Sesión' */
+/* Hacemos que el fondo sea traslúcido y el texto siempre blanco */
+div[data-testid="stSidebar"] div.stButton > button {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: white !important;
+    width: 100%;
+}
 
-        /* Color del título "Panel de Control" */
-        div[data-testid="stSidebar"] .stSelectbox label {
-            color: #007bff !important; 
-            font-weight: bold;
-        }
+/* Efecto Hover (al pasar el mouse): mantiene el texto blanco y se vuelve rojo */
+div[data-testid="stSidebar"] div.stButton > button:hover {
+    background-color: #ff4b4b !important; /* Rojo suave */
+    color: white !important;
+    border: none !important;
+}
 
-        /* Estilo de la lista cuando hacés clic (el desplegable) */
-        div[data-baseweb="popover"] ul {
-            background-color: #1c2531 !important;
-            color: white !important;
-        }
+/* 2. Selector 'Alta de Negocio' (Selectbox) */
+/* Cambia el fondo del recuadro principal y el color del texto */
+div[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    color: white !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
 
-        div[data-baseweb="popover"] li:hover {
-            background-color: #2e3b4e !important;
-            color: white !important;
-        }
+/* Cambia el color de la flecha de la lista desplegable */
+div[data-testid="stSidebar"] .stSelectbox svg {
+    fill: white !important;
+}
 
-        /* ========================================== */
-        /* FIX: BOTÓN CERRAR SESIÓN (Sin fondo blanco) */
-        /* ========================================== */
-        section[data-testid="stSidebar"] div.stButton > button {
-            background-color: rgba(255, 255, 255, 0.1) !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
-            color: white !important;
-            width: 100%;
-        }
+/* 3. La Lista Desplegable (Popover) */
+/* Forzamos a que la lista de opciones que se abre también sea oscura */
+div[data-baseweb="popover"] ul {
+    background-color: #1c2531 !important; /* Mismo color oscuro del sidebar */
+    color: white !important;
+}
 
-        section[data-testid="stSidebar"] div.stButton > button:hover {
-            background-color: #ff4b4b !important;
-            border: none !important;
-            color: white !important;
-            transform: scale(1.02);
-        }
-    </style>
-    """, unsafe_allow_html=True)
+/* Efecto hover sobre las opciones de la lista */
+div[data-baseweb="popover"] li:hover {
+    background-color: #2e3b4e !important; /* Un poco más claro al pasar el mouse */
+    color: white !important;"""
+}
 
 # ==========================================
 # 2. INICIALIZACIÓN DE SERVICIOS
