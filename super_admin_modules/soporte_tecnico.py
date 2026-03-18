@@ -14,12 +14,19 @@ def mostrar(db):
             rep = doc.to_dict()
             id_doc = doc.id
             
-            # --- DISEÑO PROFESIONAL ---
-            # (El código de fecha, prioridad y fotos que ya tenemos funcionando...)
-            # --- PROCESAMIENTO DE PRIORIDAD (SEMÁFORO COMPLETO) ---
+            # --- 1. PROCESAMIENTO DE FECHA (Indispensable) ---
+            fecha_valor = rep.get("fecha", "")
+            fecha_str = "S/F"
+            if fecha_valor:
+                try:
+                    # Intentamos formatear la fecha para que se vea linda
+                    dt = datetime.fromisoformat(fecha_valor.replace('Z', '+00:00'))
+                    fecha_str = dt.strftime("%d/%m %H:%M")
+                except:
+                    fecha_str = str(fecha_valor)[:16]
+
+            # --- 2. SEMÁFORO DE PRIORIDAD ---
             prioridad = rep.get("prioridad", "Baja")
-            
-            # Asignamos el emoji según lo que eligió el dueño
             if "Urgente" in prioridad:
                 emoji_prio = "🔴"
             elif "Alta" in prioridad:
@@ -29,25 +36,28 @@ def mostrar(db):
             else:
                 emoji_prio = "🟢"
 
-            # El título ahora mostrará el color correspondiente de entrada
-            titulo = f"{emoji_prio} {rep.get('id_negocio', '').upper()} - {rep.get('tipo', 'Reporte')} ({fecha_str})"
+            # --- 3. DISEÑO DEL EXPANDER ---
+            titulo = f"{emoji_prio} {rep.get('id_negocio', 'S/N').upper()} - {rep.get('tipo', 'Reporte')} ({fecha_str})"
 
             with st.expander(titulo):
-                st.write(f"**⏰ Fecha:** {fecha_valor[:16]}")
-                st.info(f"**💬 Mensaje:** {rep.get('mensaje')}")
+                st.write(f"**👤 Usuario:** {rep.get('usuario', 'Desconocido')}")
+                st.write(f"**🚨 Prioridad:** {prioridad}")
+                st.info(f"**💬 Mensaje:** {rep.get('mensaje', 'Sin detalle')}")
                 
-                # Fotos
-                links = rep.get("fotos") or []
+                # Fotos (Buscamos en todos los nombres posibles por las dudas)
+                links = rep.get("fotos") or rep.get("links_fotos") or []
                 if links:
+                    st.write("🖼️ **Capturas adjuntas:**")
                     cols = st.columns(3)
                     for idx, link in enumerate(links):
-                        with cols[idx % 3]: st.image(link, use_container_width=True)
+                        with cols[idx % 3]: 
+                            st.image(link, use_container_width=True)
+                            st.markdown(f"[🔗 Ver]({link})")
 
                 st.divider()
                 c1, c2 = st.columns(2)
                 with c1:
                     if st.button("✅ Resolver y Archivar", key=f"res_{id_doc}_{i}", use_container_width=True):
-                        # Actualizamos estado y agregamos fecha de resolución
                         db.collection("reportes_error").document(id_doc).update({
                             "estado": "resuelto",
                             "fecha_resolucion": datetime.now().isoformat()
@@ -63,5 +73,4 @@ def mostrar(db):
             st.success("🙌 ¡Excelente! No tenés reportes pendientes.")
 
     except Exception as e:
-        # Nota: Si Firebase te pide un índice, aparecerá un link aquí abajo.
         st.error(f"Error: {e}")
