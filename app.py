@@ -4,9 +4,10 @@ from firebase_admin import credentials, firestore
 import pandas as pd
 from datetime import datetime, timedelta
 import os
+import urllib.parse
 
 # ==========================================
-# 0. CONFIGURACIÓN VISUAL
+# 0. CONFIGURACIÓN VISUAL Y FUNCIONES
 # ==========================================
 st.set_page_config(page_title="JL Gestión Pro", page_icon="🛍️", layout="wide")
 
@@ -18,15 +19,12 @@ IMG_SIDEBAR = "logo_chico.png"
 def mostrar_titulo():
     st.markdown("<h1 style='text-align: center; color: #1E88E5;'>🛍️ JL GESTIÓN PRO</h1>", unsafe_allow_html=True)
 
-# Lógica para sumar un mes a una fecha str "DD/MM/AAAA"
 def sumar_un_mes(fecha_str):
     try:
         fecha_dt = datetime.strptime(fecha_str, "%d/%m/%Y")
-        # Sumamos 31 días y ajustamos al mes siguiente aproximado
         proxima = fecha_dt + timedelta(days=31)
         return proxima.strftime("%d/%m/%Y")
-    except:
-        return fecha_str
+    except: return fecha_str
 
 # ==========================================
 # 1. CONEXIÓN A FIREBASE
@@ -102,26 +100,74 @@ if not st.session_state['autenticado']:
             else: st.error("❌ Usuario o Contraseña incorrectos")
 
 # ==========================================
-# 4. INTERFAZ SEGÚN ROL
+# 4. INTERFAZ PRINCIPAL
 # ==========================================
 else:
     negocio_id = st.session_state['id_negocio']
     vendedor_nom = st.session_state['nombre_real'] or st.session_state['usuario']
     rol_actual = st.session_state['rol']
 
+    # --- BARRA LATERAL (CENTRO DE NOTIFICACIONES) ---
     with st.sidebar:
         if os.path.exists(IMG_SIDEBAR): st.image(IMG_SIDEBAR, width=150)
         st.write(f"👤 **{vendedor_nom}**")
+        
+        st.divider()
+        st.subheader("🔔 Notificaciones")
+
+        # A. ALERTAS DE COBRO (CLIENTES PRÓXIMOS A PAGAR)
+        st.markdown("📅 **Próximos Cobros**")
+        clis_ref = db.collection("usuarios").where("id_negocio", "==", negocio_id).where("rol", "==", "cliente").stream()
+        hoy = datetime.now()
+        
+        for c in clis_ref:
+            cd = c.to_dict()
+            fecha_p = cd.get('promesa_pago', '')
+            try:
+                fecha_dt = datetime.strptime(fecha_p, "%d/%m/%Y")
+                # Si faltan 3 días o menos, o ya pasó
+                if (fecha_dt - hoy).days <= 3:
+                    # Calcular saldo rápido para el mensaje
+                    v_f = list(db.collection("ventas_procesadas").where("cliente_id", "==", c.id).where("metodo", "==", "Fiado").stream())
+                    p_f = list(db.collection("pagos_clientes").where("cliente_id", "==", c.id).stream())
+                    saldo = sum(v.to_dict().get('total', 0) for v in v_f) - sum(p.to_dict().get('monto', 0) for p in p_f)
+                    
+                    if saldo > 0:
+                        with st.container(border=True):
+                            st.markdown(f"⚠️ **{cd.get('nombre')}**")
+                            st.caption(f"Vence: {fecha_p} | Saldo: ${saldo:,.2f}")
+                            
+                            # Botón de WhatsApp
+                            msg = f"Hola {cd.get('nombre')}, te recuerdo amablemente que se acerca tu fecha de pago ({fecha_p}). Tu saldo pendiente es de ${saldo:,.2f}. ¡Muchas gracias!"
+                            msg_url = urllib.parse.quote(msg)
+                            tel = str(cd.get('tel')).replace(" ", "").replace("+", "")
+                            st.markdown(f"[📲 Avisar por WA](https://wa.me/{tel}?text={msg_url})")
+            except: pass
+
+        st.divider()
+        
+        # B. OFERTAS DE PROVEEDORES
+        st.markdown("🚀 **Ofertas del Día**")
+        if st.session_state.df_proveedor is not None:
+            ofertas = st.session_state.df_proveedor[st.session_state.df_proveedor['Productos'].str.contains('OFERTA|PROMO|DESCUENTO', case=False, na=False)]
+            if not ofertas.empty:
+                for _, row in ofertas.head(5).iterrows():
+                    st.info(f"🏷️ {row['Productos']}\n\n**${row['Precio']:,.2f}**")
+            else:
+                st.caption("No hay ofertas cargadas hoy.")
+
+        st.divider()
         if st.button("🔴 Cerrar Sesión", use_container_width=True): 
             for key in list(st.session_state.keys()): del st.session_state[key]
             st.rerun()
 
     mostrar_titulo()
 
+    # --- PESTAÑAS (DUEÑO) ---
     if rol_actual == "negocio":
         tabs = st.tabs(["🛒 Ventas", "📉 Gastos", "📜 Historial", "👥 Clientes"])
 
-        with tabs[0]: # PESTAÑA VENTAS (SIN CAMBIOS)
+        with tabs[0]: # VENTAS (SIN TOCAR)
             col_izq, col_der = st.columns([1.6, 1])
             with col_izq:
                 busqueda = st.text_input("🔍 Buscar producto...", placeholder="Ej: Aceite...")
@@ -177,7 +223,7 @@ else:
                         })
                         st.session_state.carrito = []; st.success("Venta Exitosa"); st.rerun()
 
-        with tabs[1]: # GASTOS (NUEVO)
+        with tabs[1]: # GASTOS
             st.subheader("📉 Gastos")
             with st.form("g_form"):
                 m = st.number_input("Monto", 0.0); d = st.text_input("Detalle")
@@ -193,7 +239,7 @@ else:
                 with st.expander(f"{hd.get('fecha_str', '')} | {hd.get('cliente', '')} | ${hd.get('total', 0):,.2f}"):
                     for i in hd.get('items', []): st.write(f"- {i['cantidad']}x {i['nombre']}")
 
-        with tabs[3]: # PESTAÑA CLIENTES (CON LOGICA DE FECHA)
+        with tabs[3]: # CLIENTES (SIN TOCAR)
             col_reg, col_list = st.columns([1, 2.5])
             with col_reg:
                 st.subheader("➕ Nuevo Cliente")
@@ -221,28 +267,20 @@ else:
                         with c_i:
                             st.write(f"**DNI:** {cd.get('dni')} | **WA:** {cd.get('tel')}")
                             st.write(f"📅 **Próximo Pago:** :red[{cd.get('promesa_pago', '---')}]")
-                            
-                            # SECCIÓN DE EDICIÓN RÁPIDA
                             with st.popover("✏️ Editar WA / Fecha"):
                                 nuevo_wa = st.text_input("Nuevo WhatsApp", value=cd.get('tel'))
                                 nueva_fecha = st.text_input("Nueva Fecha Promesa", value=cd.get('promesa_pago'))
                                 if st.button("Guardar Cambios", key=f"edit_{c.id}"):
                                     db.collection("usuarios").document(c.id).update({"tel": nuevo_wa, "promesa_pago": nueva_fecha})
                                     st.success("Actualizado"); st.rerun()
-                        
                         with c_p:
                             m_entrega = st.number_input("Ingresar entrega $", 0.0, key=f"p_{c.id}")
                             if st.button("Registrar Pago", key=f"btn_{c.id}", use_container_width=True):
                                 if m_entrega > 0:
-                                    # Registrar pago
                                     db.collection("pagos_clientes").add({"cliente_id": c.id, "monto": m_entrega, "fecha": datetime.now(), "fecha_str": datetime.now().strftime("%d/%m/%Y"), "hora_str": datetime.now().strftime("%H:%M"), "id_negocio": negocio_id})
-                                    
-                                    # LÓGICA DE SALTO DE MES AUTOMÁTICO
                                     nueva_p_pago = sumar_un_mes(cd.get('promesa_pago', datetime.now().strftime("%d/%m/%Y")))
                                     db.collection("usuarios").document(c.id).update({"promesa_pago": nueva_p_pago})
-                                    
-                                    st.success(f"Pago registrado. Próximo cobro: {nueva_p_pago}"); st.rerun()
-                        
+                                    st.success("Registrado"); st.rerun()
                         st.divider()
                         movs = []
                         for v in v_f:
@@ -255,13 +293,12 @@ else:
                         for m in sorted(movs, key=lambda x: x['dt'] if x['dt'] else datetime.min, reverse=True):
                             st.write(m['t']); st.caption(m['s'])
 
-    # VISTA CLIENTE (SIN CAMBIOS)
+    # VISTA CLIENTE (SIN TOCAR)
     elif rol_actual == "cliente":
         c_id = st.session_state['usuario']
         v_f = list(db.collection("ventas_procesadas").where("cliente_id", "==", c_id).where("metodo", "==", "Fiado").stream())
         p_f = list(db.collection("pagos_clientes").where("cliente_id", "==", c_id).stream())
         saldo = sum(v.to_dict().get('total', 0) for v in v_f) - sum(p.to_dict().get('monto', 0) for p in p_f)
-        
         st.markdown(f"### Hola {vendedor_nom}, tu saldo actual es:")
         st.error(f"# ${saldo:,.2f}")
         st.divider()
