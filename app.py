@@ -55,7 +55,7 @@ if 'autenticado' not in st.session_state:
         'autenticado': False,
         'rol': None,
         'usuario_id': None,
-        'nombre_real': "Usuario",
+        'nombre_real': "nombre_real",
         'id_negocio': None,
         'carrito': [] # Carrito global para que no se pierda al navegar
     })
