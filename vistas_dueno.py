@@ -1,50 +1,57 @@
 import streamlit as st
-from modulos_dueno import vender, gastos, historial, clientes, estadisticas # <--- Agregamos este
+from modulos_dueno import vender, gastos, historial, clientes, estadisticas
 
 def mostrar_dueno(db, id_negocio, ahora_ar, nombre_u):
+    # 1. Título principal
     st.title(f"🏬 Gestión Pro: {id_negocio.upper()}")
     
-    # --- AQUÍ IRÍAN TUS TABS O EL RESTO DE TU CÓDIGO ---
-    # (Mantené lo que ya tenías escrito aquí)
+    # 2. TUS FUNCIONES ORIGINALES (Las pestañas que ya tenías)
+    # Aquí es donde Streamlit renderiza lo que "desapareció"
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "💰 Vender", "📉 Gastos", "📜 Historial", "👥 Clientes", "📊 Estadísticas"
+    ])
+    
+    with tab1:
+        vender.mostrar_vender(db, id_negocio, ahora_ar)
+    
+    with tab2:
+        gastos.mostrar_gastos(db, id_negocio, ahora_ar)
+        
+    with tab3:
+        historial.mostrar_historial(db, id_negocio)
+        
+    with tab4:
+        clientes.mostrar_clientes(db, id_negocio)
+        
+    with tab5:
+        estadisticas.mostrar_estadisticas(db, id_negocio)
 
-    # ==========================================
-    # SECCIÓN DE SOPORTE TÉCNICO (AHORA DENTRO DE LA FUNCIÓN)
-    # ==========================================
+    # 3. SECCIÓN DE SOPORTE (Al final de todo)
     st.markdown("---")
     with st.expander("🆘 ¿Tenés algún problema o duda? Reportalo aquí"):
         st.subheader("📩 Centro de Reportes")
         
-        # Formulario rápido
         with st.form("form_reporte_error", clear_on_submit=True):
             tipo_fallo = st.selectbox("¿Qué sucede?", [
-                "Error Visual", 
-                "Error al Cargar Datos", 
-                "Lentitud en el Sistema", 
-                "Sugerencia de Mejora",
-                "Otro"
+                "Error Visual", "Error al Cargar Datos", 
+                "Lentitud", "Sugerencia", "Otro"
             ])
             
-            detalle = st.text_area("Describí brevemente lo que pasó:", 
-                                  placeholder="Ej: No se actualiza el precio del alfajor...")
-            
+            detalle = st.text_area("Describí brevemente lo que pasó:")
             btn_enviar = st.form_submit_button("ENVIAR REPORTE A JL GESTIÓN")
 
             if btn_enviar:
                 if detalle:
-                    # Datos del reporte (Corregido: nombre_u, ahora_ar)
                     reporte = {
-                        "id_negocio": id_negocio,  
-                        "usuario": nombre_u,    
+                        "id_negocio": id_negocio,
+                        "usuario": nombre_u, # Usamos la variable de la función
                         "mensaje": detalle,
                         "tipo": tipo_fallo,
-                        "fecha": ahora_ar,            
+                        "fecha": ahora_ar,   # Usamos la variable de la función
                         "estado": "pendiente"
                     }
-                    
-                    # Guardar en Firebase
                     db.collection("reportes_error").add(reporte)
-                    
-                    st.success("✅ ¡Gracias! Tu reporte fue enviado al Administrador.")
-                    st.balloons() 
+                    st.success("✅ Reporte enviado al Administrador.")
+                    st.balloons()
                 else:
-                    st.warning("⚠️ Por favor, escribí un detalle para que podamos ayudarte.")
+                    st.warning("⚠️ Por favor, escribí un detalle.")
