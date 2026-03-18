@@ -42,7 +42,7 @@ if not firebase_admin._apps:
 db = firestore.client()
 
 # ==========================================
-# 2. ESTADO DE SESIÓN (SIN RESUMIR)
+# 2. ESTADO DE SESIÓN
 # ==========================================
 if 'autenticado' not in st.session_state:
     st.session_state.update({
@@ -145,12 +145,12 @@ else:
                         st.markdown(f"### 🛒 Compra: {d.get('fecha_str')} - {d.get('hora_str')}hs")
                         for i in d.get('items', []):
                             st.markdown(f"📍 **{i['cantidad']}** x {i['nombre']} (${i['subtotal']:,.2f})")
-                    with c2: st.markdown(f"<h2 style='color:red;'>- ${d.get('total'):,.2f}</h2>", unsafe_allow_html=True)
+                    with c2: st.markdown(f"<h2 style='color:red;'>- ${d.get('total', 0):,.2f}</h2>", unsafe_allow_html=True)
                 else:
                     with c1: st.markdown(f"### ✅ Pago Recibido: {d.get('fecha_str')} - {d.get('hora_str')}hs")
-                    with c2: st.markdown(f"<h2 style='color:green;'>+ ${d.get('monto'):,.2f}</h2>", unsafe_allow_html=True)
+                    with c2: st.markdown(f"<h2 style='color:green;'>+ ${d.get('monto', 0):,.2f}</h2>", unsafe_allow_html=True)
 
-    # --- VISTA DUEÑO (USANDO PRODUCTO Y PRECIO) ---
+    # --- VISTA DUEÑO (CON PRODUCTOS Y PRECIO) ---
     elif rol_u == "negocio":
         tabs = st.tabs(["🛒 Ventas", "📉 Gastos", "📜 Historial", "👥 Clientes"])
         
@@ -159,8 +159,8 @@ else:
                 st.session_state.df_proveedor = pd.read_csv(URL_PROVEEDOR_CSV)
             
             df = st.session_state.df_proveedor
-            # Respetando A2 (PRODUCTOS) y C2 (PRECIO) tal cual dijiste
-            prod_sel = st.selectbox("Seleccionar Producto", df['PRODUCTO'].unique())
+            # A2 = PRODUCTOS | C2 = PRECIO
+            prod_sel = st.selectbox("Seleccionar Producto", df['PRODUCTOS'].unique())
             cant = st.number_input("Cantidad", min_value=0.1, value=1.0, step=0.1)
             
             if st.button("Agregar al Carrito"):
