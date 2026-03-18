@@ -5,4 +5,4 @@ pytz
 plotly
 st-gsheets-connection
 streamlit-antd-components
-google-generativeai
+google-generativeai>=0.8.3
