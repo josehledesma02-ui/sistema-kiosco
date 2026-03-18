@@ -159,12 +159,12 @@ else:
                 st.session_state.df_proveedor = pd.read_csv(URL_PROVEEDOR_CSV)
             
             df = st.session_state.df_proveedor
-            # Respetando A2 (PRODUCTO) y C2 (PRECIO) tal cual dijiste
+            # Respetando A2 (PRODUCTOS) y C2 (PRECIO) tal cual dijiste
             prod_sel = st.selectbox("Seleccionar Producto", df['PRODUCTO'].unique())
             cant = st.number_input("Cantidad", min_value=0.1, value=1.0, step=0.1)
             
             if st.button("Agregar al Carrito"):
-                precio_unit = df[df['PRODUCTO'] == prod_sel]['PRECIO'].values[0]
+                precio_unit = df[df['PRODUCTOS'] == prod_sel]['PRECIO'].values[0]
                 st.session_state.carrito.append({
                     'nombre': prod_sel, 'cantidad': cant, 
                     'precio': float(precio_unit), 'subtotal': float(precio_unit) * cant
