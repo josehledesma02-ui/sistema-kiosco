@@ -1,27 +1,26 @@
 import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
-import streamlit_antd_components as sac # Importamos la librería de íconos
 
 def renderizar(db, id_negocio, ahora_ar, nombre_u):
-    # Estilo personalizado mejorado para alineación y tamaños
+    # Estilos para que todo quede centrado y la letra grande
     st.markdown("""
         <style>
-            /* Agrandar letra de tablas y textos generales */
-            .stTable td, .stTable th { font-size: 18px !important; }
-            .big-font { font-size: 20px !important; font-weight: bold; }
-            .total-font { font-size: 30px !important; color: #1E88E5; font-weight: bold; }
-            
-            /* Alineación vertical centrada para las filas del carrito */
-            [data-testid="stHorizontalBlock"] {
-                align-items: center;
+            .stButton > button {
+                border: none !important;
+                background: transparent !important;
+                color: #FF4B4B !important;
+                font-size: 20px !important;
+                padding: 0 !important;
             }
-            
-            /* Tamaño de fuente para el precio en el carrito */
-            .precio-carrito {
-                font-size: 18px !important;
+            .stButton > button:hover {
+                color: #990000 !important;
+                background: #FFEDED !important;
+            }
+            .precio-grande {
+                font-size: 18px;
+                font-weight: bold;
                 text-align: right;
-                margin: 0;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -60,12 +59,16 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
         if seleccion:
             precio_u = df_p[df_p['PRODUCTOS'] == seleccion]['PRECIO'].values[0]
             precio_f = f"${precio_u:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-            st.markdown(f"<p class='big-font'>Precio Unitario: {precio_f}</p>", unsafe_allow_html=True)
+            st.write(f"**Precio Unitario: {precio_f}**")
             
             cant = st.number_input("Cantidad:", min_value=1, value=1, step=1)
             
             if st.button("➕ Agregar al Carrito", use_container_width=True):
+                # Usamos un ID único para cada item del carrito para que no se borren en cadena
+                import time
+                item_id = str(time.time()) 
                 st.session_state.carrito.append({
+                    "id": item_id,
                     "nombre": seleccion,
                     "cantidad": cant,
                     "precio": precio_u,
@@ -75,39 +78,36 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
         
         st.divider()
         st.subheader("📋 Detalle de la compra")
+        
+        # --- NUEVA LÓGICA DE BORRADO INDIVIDUAL ---
         if st.session_state.carrito:
-            # Mostramos cada ítem con opciones de edición y eliminación profesional
+            # Hacemos una copia para iterar sin errores
             for i, item in enumerate(st.session_state.carrito):
-                # Reajustamos columnas para dar espacio al ícono
-                c1, c2, c3, c4 = st.columns([3, 1, 1.5, 0.3]) 
+                c1, c2, c3, c4 = st.columns([3, 1, 1.5, 0.4])
                 with c1:
-                    st.markdown(f"**{item['nombre']}**")
+                    st.write(f"**{item['nombre']}**")
                 with c2:
-                    nueva_cant = st.number_input(f"Cant.", min_value=1, value=item['cantidad'], key=f"cant_{i}")
-                    if nueva_cant != item['cantidad']:
-                        st.session_state.carrito[i]['cantidad'] = nueva_cant
-                        st.session_state.carrito[i]['subtotal'] = item['precio'] * nueva_cant
+                    # Si cambias la cantidad, actualizamos
+                    nueva_q = st.number_input("Cant.", min_value=1, value=item['cantidad'], key=f"q_{item['id']}")
+                    if nueva_q != item['cantidad']:
+                        st.session_state.carrito[i]['cantidad'] = nueva_q
+                        st.session_state.carrito[i]['subtotal'] = item['precio'] * nueva_q
                         st.rerun()
                 with c3:
                     sub_f = f"${item['subtotal']:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-                    st.markdown(f"<p class='precio-carrito'>{sub_f}</p>", unsafe_allow_html=True)
+                    st.markdown(f"<p class='precio-grande'>{sub_f}</p>", unsafe_allow_html=True)
                 with c4:
-                    # Usamos sac.buttons con un solo botón de icono para que funcione como disparador
-                    # bootstrap_icon: 'trash3-fill'
-                    btn_eliminar = sac.buttons([
-                        sac.ButtonsItem(icon='trash3-fill', color='#FF1744'),
-                    ], key=f"del_{i}", index=None, variant='link', size='sm')
-                    
-                    if btn_eliminar is not None:
+                    # Botón de eliminar con "key" única basada en el ID del item
+                    if st.button("🗑️", key=f"del_{item['id']}"):
                         st.session_state.carrito.pop(i)
                         st.rerun()
             
             st.divider()
-            if st.button("🗑️ Vaciar Carrito Completo", use_container_width=True):
+            if st.button("❌ Vaciar Todo"):
                 st.session_state.carrito = []
                 st.rerun()
         else:
-            st.info("No hay productos en el ticket.")
+            st.info("Ticket vacío")
 
     with col_der:
         st.subheader("💰 Resumen y Pago")
@@ -116,53 +116,27 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
             
             c_desc, c_rec = st.columns(2)
             with c_desc:
-                porcentaje_desc = st.number_input("Descuento %", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
+                p_desc = st.number_input("Descuento %", min_value=0.0, value=0.0)
             with c_rec:
-                porcentaje_rec = st.number_input("Recargo %", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
+                p_rec = st.number_input("Recargo %", min_value=0.0, value=0.0)
             
-            monto_descuento = (suma_productos * (porcentaje_desc / 100))
-            monto_recargo = (suma_productos * (porcentaje_rec / 100))
-            total_final = suma_productos - monto_descuento + monto_recargo
-            
-            if monto_descuento > 0: st.write(f"📉 Descuento: -${monto_descuento:,.2f}")
-            if monto_recargo > 0: st.write(f"📈 Recargo: +${monto_recargo:,.2f}")
-
+            total_final = suma_productos * (1 - p_desc/100 + p_rec/100)
             total_f = f"${total_final:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-            st.markdown(f"<p class='total-font'>TOTAL: {total_f}</p>", unsafe_allow_html=True)
             
-            metodo = st.selectbox("Medio de Pago:", ["Efectivo", "Débito", "Crédito", "Transferencia", "Fiado"])
+            st.markdown(f"## TOTAL: {total_f}")
             
-            detalles_pago = ""
-            if metodo == "Transferencia":
-                detalles_pago = st.text_input("Cuenta destino:", placeholder="Ej: Mercado Pago")
-            
-            cliente = "Consumidor Final"
-            if metodo == "Fiado":
-                cliente = st.text_input("Nombre Cliente:")
+            metodo = st.selectbox("Pago:", ["Efectivo", "Débito", "Crédito", "Transferencia", "Fiado"])
+            cliente = st.text_input("Nombre Cliente:") if metodo == "Fiado" else "Consumidor Final"
 
             if st.button("✅ CONFIRMAR VENTA", type="primary", use_container_width=True):
-                if metodo == "Fiado" and not cliente:
-                    st.warning("⚠️ El nombre es obligatorio para fiar.")
-                else:
-                    venta_data = {
-                        "id_negocio": id_negocio,
-                        "vendedor": nombre_u,
-                        "subtotal_base": suma_productos,
-                        "descuento_p": porcentaje_desc,
-                        "recargo_p": porcentaje_rec,
-                        "total": total_final,
-                        "metodo": metodo,
-                        "detalles_pago": detalles_pago,
-                        "cliente_nombre": cliente,
-                        "items": st.session_state.carrito,
-                        "fecha_str": ahora_ar.strftime("%d/%m/%Y"),
-                        "hora_str": ahora_ar.strftime("%H:%M"),
-                        "fecha_completa": ahora_ar.isoformat()
-                    }
-                    db.collection("ventas_procesadas").add(venta_data)
-                    st.session_state.carrito = []
-                    st.success("¡Venta guardada!")
-                    st.balloons()
-                    st.rerun()
-        else:
-            st.write("Esperando productos...")
+                venta_data = {
+                    "vendedor": nombre_u,
+                    "total": total_final,
+                    "metodo": metodo,
+                    "items": st.session_state.carrito,
+                    "fecha": ahora_ar.isoformat()
+                }
+                db.collection("ventas_procesadas").add(venta_data)
+                st.session_state.carrito = []
+                st.success("¡Venta guardada!")
+                st.rerun()
