@@ -69,7 +69,7 @@ st.markdown("""
             font-weight: bold !important;
         }
 
-        /* Lista desplegable del menú */
+        /* Lista desplegable */
         div[data-baseweb="popover"] ul {
             background-color: #1c2531 !important;
             color: white !important;
@@ -164,6 +164,13 @@ else:
             st.image("static/images/logo_chico.png", width=100)
         except:
             st.title("🚀 JL Gestión")
+
+        # --- AQUÍ LA NOTIFICACIÓN PARA EL SUPER ADMIN ---
+        if st.session_state.rol == "super_admin":
+            pendientes = db.collection("reportes_error").where("estado", "==", "pendiente").stream()
+            cant = len(list(pendientes))
+            if cant > 0:
+                st.error(f"🔔 {cant} Reportes Nuevos")
             
         st.write(f"👤 **{st.session_state.nombre_real}**")
         st.caption(f"📍 Negocio: {st.session_state.id_negocio.upper()}")
@@ -175,7 +182,7 @@ else:
             st.rerun()
         
         st.markdown("---")
-        # El reloj ahora debería ser blanco brillante
+        # Reloj corregido con CSS para que sea blanco
         st.caption(f"🕒 {ahora.strftime('%d/%m/%Y %H:%M')}")
 
     # --- REPARTIDOR DE VISTAS SEGÚN ROL ---
