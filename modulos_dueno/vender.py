@@ -92,9 +92,13 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
                     sub_f = f"${item['subtotal']:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
                     st.markdown(f"<p class='precio-carrito'>{sub_f}</p>", unsafe_allow_html=True)
                 with c4:
-                    # USAMOS UN ÍCONO PROFESIONAL DE PAPELERA ROJA COMO BOTÓN
-                    # sac.icon es un ícono interactivo alineado perfectamente
-                    if sac.icon('trash3-fill', size=20, color='#FF1744', key=f"del_{i}", title="Eliminar"):
+                    # Usamos sac.buttons con un solo botón de icono para que funcione como disparador
+                    # bootstrap_icon: 'trash3-fill'
+                    btn_eliminar = sac.buttons([
+                        sac.ButtonsItem(icon='trash3-fill', color='#FF1744'),
+                    ], key=f"del_{i}", index=None, variant='link', size='sm')
+                    
+                    if btn_eliminar is not None:
                         st.session_state.carrito.pop(i)
                         st.rerun()
             
