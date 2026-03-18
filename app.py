@@ -9,25 +9,84 @@ import vistas_cliente
 # ==========================================
 # Estilos CSS
 st.markdown("""
-   /* ========================================== */
-/* FIX: COMPONENTES DEL SIDEBAR PARA MODO OSCURO */
-/* ========================================== */
+    <style>
+        /* Fondo general de la app */
+        .main { background-color: #f8f9fa; }
+        
+        /* Estilo de métricas */
+        [data-testid="stMetricValue"] { font-size: 1.8rem !important; color: #007bff; }
+        
+        /* Botones generales de la derecha */
+        .stButton>button {
+            border-radius: 8px;
+            height: 3em;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
 
-/* 1. Botón 'Cerrar Sesión' */
-/* Hacemos que el fondo sea traslúcido y el texto siempre blanco */
-div[data-testid="stSidebar"] div.stButton > button {
-    background-color: rgba(255, 255, 255, 0.1) !important;
-    border: 1px solid rgba(255, 255, 255, 0.2) !important;
-    color: white !important;
-    width: 100%;
-}
+        /* --- SIDEBAR PERSONALIZADO --- */
+        [data-testid="stSidebar"] {
+            background-image: linear-gradient(#2e3b4e, #1c2531);
+            color: white !important;
+        }
 
-/* Efecto Hover (al pasar el mouse): mantiene el texto blanco y se vuelve rojo */
-div[data-testid="stSidebar"] div.stButton > button:hover {
-    background-color: #ff4b4b !important; /* Rojo suave */
-    color: white !important;
-    border: none !important;
-}
+        /* Forzar que todos los textos del sidebar sean blancos */
+        [data-testid="stSidebar"] * {
+            color: white !important;
+        }
+
+        /* --- FIX: SELECTOR (SELECTBOX) DEL PANEL DE CONTROL --- */
+        /* Cambia el recuadro del selector */
+        div[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div {
+            background-color: rgba(255, 255, 255, 0.1) !important;
+            color: white !important;
+            border: 1px solid rgba(255, 255, 255, 0.3) !important;
+            border-radius: 8px;
+        }
+
+        /* Color de la flechita del selector */
+        div[data-testid="stSidebar"] .stSelectbox svg {
+            fill: white !important;
+        }
+
+        /* Título del selector (Panel de Control) */
+        div[data-testid="stSidebar"] .stSelectbox label {
+            color: #4dabf7 !important; /* Un azul claro para que resalte */
+            font-weight: bold;
+        }
+
+        /* Lista desplegable que se abre (Popover) */
+        div[data-baseweb="popover"] ul {
+            background-color: #1c2531 !important;
+            color: white !important;
+            border: 1px solid #4dabf7;
+        }
+
+        div[data-baseweb="popover"] li:hover {
+            background-color: #2e3b4e !important;
+            color: white !important;
+        }
+
+        /* --- FIX: BOTÓN CERRAR SESIÓN --- */
+        section[data-testid="stSidebar"] div.stButton > button {
+            background-color: rgba(255, 255, 255, 0.15) !important;
+            border: 1px solid rgba(255, 255, 255, 0.3) !important;
+            color: white !important;
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        section[data-testid="stSidebar"] div.stButton > button:hover {
+            background-color: #ff4b4b !important; /* Rojo al pasar el mouse */
+            border: none !important;
+            color: white !important;
+            transform: scale(1.02);
+        }
+
+        /* Icono de la campana de notificaciones o logout si existiera */
+        .st-emotion-cache-17l9mre { color: white !important; }
+    </style>
+    """, unsafe_allow_html=True)
 
 /* 2. Selector 'Alta de Negocio' (Selectbox) */
 /* Cambia el fondo del recuadro principal y el color del texto */
