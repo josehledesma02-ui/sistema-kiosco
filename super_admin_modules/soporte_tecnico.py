@@ -6,14 +6,17 @@ def mostrar(db):
     st.subheader("📩 Bandeja de Entrada: Soporte Técnico")
     
     # --- 1. CONFIGURACIÓN DE IA (GÉMINIS) ---
-    # Intentamos configurar la IA usando la clave de los Secrets
     if "GEMINI_API_KEY" not in st.secrets:
         st.error("❌ No se encontró 'GEMINI_API_KEY' en los Secrets de Streamlit.")
         model = None
     else:
         try:
             genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-            model = genai.GenerativeModel('models/gemini-1.5-flash')
+            
+            # Cambiamos a 'gemini-1.5-flash-latest' o 'gemini-pro'
+            # 'gemini-pro' es el que menos errores de versión da
+            model = genai.GenerativeModel('gemini-pro') 
+            
         except Exception as e:
             st.warning(f"⚠️ Error al conectar con la IA: {e}")
             model = None
