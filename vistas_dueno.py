@@ -26,3 +26,21 @@ def mostrar_dueno(db, id_negocio, ahora_ar, nombre_u):
 
     st.divider()
     st.info("💡 **Nota:** Sistema modular JL Gestión v2.0")
+# Agregar esto al final de la vista del dueño o en un botón de "Ayuda"
+with st.expander("🆘 Reportar un problema técnico"):
+    mensaje_error = st.text_area("¿Qué está fallando?", placeholder="Ej: No puedo cargar el stock...")
+    tipo_error = st.selectbox("Categoría", ["Error de Carga", "Login", "Stock", "Otros"])
+    
+    if st.button("Enviar Reporte a Soporte"):
+        if mensaje_error:
+            nuevo_reporte = {
+                "id_negocio": id_negocio,
+                "usuario": nombre_real,
+                "mensaje": mensaje_error,
+                "tipo": tipo_error,
+                "fecha": ahora, # Usar la variable 'ahora' que ya tenés
+                "estado": "pendiente"
+            }
+            db.collection("reportes_error").add(nuevo_reporte)
+            st.success("✅ Reporte enviado. El administrador lo revisará pronto.")
+            st.balloons() # La animación que te gusta
