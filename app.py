@@ -7,7 +7,7 @@ import os
 import urllib.parse
 
 # ==========================================
-# 0. CONFIGURACIÓN VISUAL Y FUNCIONES
+# 0. CONFIGURACIÓN VISUAL
 # ==========================================
 st.set_page_config(page_title="JL Gestión Pro", page_icon="🛍️", layout="wide")
 
@@ -54,12 +54,6 @@ if 'autenticado' not in st.session_state:
         'carrito': [], 'df_proveedor': None
     })
 
-def limpiar_precio_final(valor):
-    if pd.isna(valor) or str(valor).strip() == "": return 0.0
-    s = str(valor).strip().replace('$', '').replace(' ', '').replace(',', '')
-    try: return float(s)
-    except: return 0.0
-
 def cargar_datos_proveedor():
     try:
         df = pd.read_csv(URL_PROVEEDOR_CSV, header=1)
@@ -68,16 +62,14 @@ def cargar_datos_proveedor():
         col_prec = [c for c in df.columns if any(kw in c.lower() for kw in ['precio', 'venta', 'valor'])]
         if col_prod and col_prec:
             df = df.rename(columns={col_prod[0]: 'Productos', col_prec[0]: 'Precio_Raw'})
-            df['Precio'] = df['Precio_Raw'].apply(limpiar_precio_final)
-            df = df.dropna(subset=['Productos'])
-            df = df[(df['Productos'] != "") & (df['Precio'] > 0)]
+            df['Precio'] = df['Precio_Raw'].apply(lambda x: float(str(x).replace('$','').replace('.','').replace(',','.')) if pd.notna(x) else 0)
             st.session_state.df_proveedor = df
     except: pass
 
 if st.session_state.df_proveedor is None: cargar_datos_proveedor()
 
 # ==========================================
-# 3. LOGIN (NEGOCIO + NOMBRE + DNI)
+# 3. LOGIN (BÚSQUEDA POR NOMBRE REAL + NEGOCIO)
 # ==========================================
 if not st.session_state['autenticado']:
     _, col_login, _ = st.columns([1, 1.5, 1])
@@ -86,27 +78,30 @@ if not st.session_state['autenticado']:
         mostrar_titulo()
         
         negocio_input = st.text_input("Negocio (Ej: fabricon)").strip().lower()
-        u_input = st.text_input("Nombre y Apellido (Ej: María Molina)").strip()
+        u_input = st.text_input("Nombre y Apellido (Tal cual te registraron)").strip()
         c_input = st.text_input("Contraseña (DNI)", type="password").strip()
         
         if st.button("Ingresar", use_container_width=True, type="primary"):
             if negocio_input and u_input and c_input:
-                # El ID se forma: "Nombre Apellido negocio"
-                id_usuario_compuesto = f"{u_input} {negocio_input}"
-                user_ref = db.collection("usuarios").document(id_usuario_compuesto).get()
+                # BUSQUEDA POR NOMBRE REAL DENTRO DEL NEGOCIO
+                query = db.collection("usuarios")\
+                          .where("id_negocio", "==", negocio_input)\
+                          .where("nombre", "==", u_input)\
+                          .limit(1).get()
                 
-                if user_ref.exists:
-                    d = user_ref.to_dict()
+                if len(query) > 0:
+                    doc = query[0]
+                    d = doc.to_dict()
                     if str(d.get('password')) == c_input:
                         st.session_state.update({
-                            'autenticado': True, 'usuario': id_usuario_compuesto, 
+                            'autenticado': True, 'usuario': doc.id, 
                             'rol': str(d.get('rol')).strip().lower(),
                             'id_negocio': d.get('id_negocio'), 'nombre_real': d.get('nombre'),
-                            'id_usuario': id_usuario_compuesto
+                            'id_usuario': doc.id
                         })
                         st.rerun()
                     else: st.error("❌ Contraseña (DNI) incorrecta")
-                else: st.error(f"❌ No se encontró '{u_input}' en '{negocio_input}'")
+                else: st.error(f"❌ No se encontró a '{u_input}' en '{negocio_input}'")
             else: st.warning("⚠️ Completa todos los campos")
 
 # ==========================================
@@ -145,12 +140,6 @@ else:
                                 st.markdown(f"[📲 Avisar](https://wa.me/{cd.get('tel')}?text={urllib.parse.quote(msg)})")
                 except: pass
 
-        st.markdown("🚀 **Ofertas**")
-        if st.session_state.df_proveedor is not None:
-            of = st.session_state.df_proveedor[st.session_state.df_proveedor['Productos'].str.contains('OFERTA|PROMO', case=False, na=False)]
-            for _, r in of.head(3).iterrows():
-                st.info(f"🏷️ {r['Productos']}\n\n**${r['Precio']:,.2f}**")
-
         st.divider()
         if st.button("🔴 Cerrar Sesión", use_container_width=True): 
             for key in list(st.session_state.keys()): del st.session_state[key]
@@ -162,7 +151,7 @@ else:
     if rol_actual == "negocio":
         tabs = st.tabs(["🛒 Ventas", "📉 Gastos", "📜 Historial", "👥 Clientes"])
 
-        with tabs[0]: # VENTAS (BLOQUEADA)
+        with tabs[0]: # VENTAS (Lógica original intacta)
             col_izq, col_der = st.columns([1.6, 1])
             with col_izq:
                 busqueda = st.text_input("🔍 Buscar producto...", placeholder="Ej: Aceite...")
@@ -205,22 +194,7 @@ else:
                         })
                         st.session_state.carrito = []; st.success("Venta Exitosa"); st.rerun()
 
-        with tabs[1]: # GASTOS
-            st.subheader("📉 Gastos")
-            with st.form("g_form"):
-                m = st.number_input("Monto", 0.0); d = st.text_input("Detalle")
-                if st.form_submit_button("Guardar Gasto"):
-                    db.collection("gastos").add({"monto": m, "detalle": d, "id_negocio": negocio_id, "fecha": datetime.now()})
-                    st.success("Gasto guardado")
-
-        with tabs[2]: # HISTORIAL
-            h_ref = db.collection("ventas_procesadas").where("id_negocio", "==", negocio_id).order_by("fecha_completa", direction=firestore.Query.DESCENDING).limit(15).stream()
-            for h in h_ref:
-                hd = h.to_dict()
-                with st.expander(f"{hd.get('fecha_str')} {hd.get('hora_str')} | {hd.get('cliente')} | ${hd.get('total'):,.2f}"):
-                    for i in hd.get('items', []): st.write(f"- {i['cantidad']}x {i['nombre']}")
-
-        with tabs[3]: # CLIENTES (BLOQUEADA)
+        with tabs[3]: # CLIENTES (Lógica original intacta)
             col_reg, col_list = st.columns([1, 2.5])
             with col_reg:
                 with st.form("form_nuevo_cliente"):
@@ -229,7 +203,7 @@ else:
                     tel_c = st.text_input("WhatsApp")
                     f_pago = st.text_input("Fecha Pago (DD/MM/AAAA)")
                     if st.form_submit_button("Guardar"):
-                        u_id = f"{nom_c} {negocio_id}" # Formato: Nombre Apellido negocio
+                        u_id = f"{nom_c} {negocio_id}"
                         db.collection("usuarios").document(u_id).set({
                             "nombre": nom_c, "password": dni_c, "rol": "cliente", 
                             "id_negocio": negocio_id, "dni": dni_c, "tel": tel_c, "promesa_pago": f_pago
