@@ -5,26 +5,26 @@ def mostrar_dueno(db, id_negocio, ahora_ar, nombre_u):
     # 1. Título principal
     st.title(f"🏬 Gestión Pro: {id_negocio.upper()}")
     
-    # 2. TUS FUNCIONES ORIGINALES (Las pestañas que ya tenías)
-    # Aquí es donde Streamlit renderiza lo que "desapareció"
+    # 2. TUS PESTAÑAS (Respetando tus nombres de funciones originales)
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "💰 Vender", "📉 Gastos", "📜 Historial", "👥 Clientes", "📊 Estadísticas"
     ])
     
     with tab1:
-        vender.mostrar_vender(db, id_negocio, ahora_ar)
+        # Aquí cambiamos 'vender.mostrar_vender' por 'vender.vender'
+        vender.vender(db, id_negocio, ahora_ar)
     
     with tab2:
-        gastos.mostrar_gastos(db, id_negocio, ahora_ar)
+        gastos.gastos(db, id_negocio, ahora_ar)
         
     with tab3:
-        historial.mostrar_historial(db, id_negocio)
+        historial.historial(db, id_negocio)
         
     with tab4:
-        clientes.mostrar_clientes(db, id_negocio)
+        clientes.clientes(db, id_negocio)
         
     with tab5:
-        estadisticas.mostrar_estadisticas(db, id_negocio)
+        estadisticas.estadisticas(db, id_negocio)
 
     # 3. SECCIÓN DE SOPORTE (Al final de todo)
     st.markdown("---")
@@ -44,10 +44,10 @@ def mostrar_dueno(db, id_negocio, ahora_ar, nombre_u):
                 if detalle:
                     reporte = {
                         "id_negocio": id_negocio,
-                        "usuario": nombre_u, # Usamos la variable de la función
+                        "usuario": nombre_u,
                         "mensaje": detalle,
                         "tipo": tipo_fallo,
-                        "fecha": ahora_ar,   # Usamos la variable de la función
+                        "fecha": ahora_ar,
                         "estado": "pendiente"
                     }
                     db.collection("reportes_error").add(reporte)
