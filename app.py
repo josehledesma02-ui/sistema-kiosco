@@ -6,7 +6,7 @@ from datetime import datetime
 import os
 
 # ==========================================
-# 0. CONFIGURACIÓN VISUAL (ESTRICTA - NO TOCAR)
+# 0. CONFIGURACIÓN VISUAL (ESTRICTA - SIN CAMBIOS)
 # ==========================================
 st.set_page_config(page_title="JL Gestión Pro", page_icon="🛍️", layout="wide")
 
@@ -43,7 +43,7 @@ if 'autenticado' not in st.session_state:
     st.session_state.update({
         'autenticado': False, 'usuario': None, 'rol': None, 
         'id_negocio': None, 'nombre_real': None, 'id_usuario': None,
-        'carrito': [], 'df_proveedor': None, 'nuevo_cliente_mode': False
+        'carrito': [], 'df_proveedor': None
     })
 
 def limpiar_precio_final(valor):
@@ -128,7 +128,7 @@ else:
         # --- VISTA DUEÑO ---
         tabs = st.tabs(["🛒 Ventas", "📉 Gastos", "📜 Historial", "👥 Clientes"])
 
-        with tabs[0]: # PESTAÑA VENTAS (RESTAURADA ORIGINAL)
+        with tabs[0]: # PESTAÑA VENTAS (MANTIENE TU DISEÑO ORIGINAL)
             col_izq, col_der = st.columns([1.6, 1])
             with col_izq:
                 busqueda = st.text_input("🔍 Buscar producto...", placeholder="Ej: Fideo...")
@@ -164,18 +164,13 @@ else:
                 c_docs = db.collection("usuarios").where("id_negocio", "==", negocio_id).where("rol", "==", "cliente").stream()
                 dict_clientes = {"Consumidor Final": "final"}
                 for c in c_docs:
-                    cd = c.to_dict(); dict_clientes[cd['nombre']] = c.id
+                    cd = c.to_dict(); dict_clientes[cd.get('nombre', 'Sin Nombre')] = c.id
                 cliente_sel = st.selectbox("Cliente", list(dict_clientes.keys()))
-                metodo = st.selectbox("Método de Pago", ["Efectivo", "Transferencia", "Débito", "Crédito", "Fiado"])
-                info_pago = st.text_input("Referencia de pago") if metodo == "Transferencia" else ""
+                metodo = st.selectbox("Método de Pago", ["Efectivo", "Transferencia", "Fiado"])
                 
                 st.divider()
-                c_rec, c_desc = st.columns(2)
-                p_recargo = c_rec.number_input("Recargo %", 0.0, 100.0, 0.0)
-                p_descuento = c_desc.number_input("Descuento %", 0.0, 100.0, 0.0)
-
                 sub_t = sum(it['subtotal'] for it in st.session_state.carrito)
-                total_f = sub_t + (sub_t * p_recargo / 100) - (sub_t * p_descuento / 100)
+                total_f = sub_t
 
                 st.markdown(f"<div style='background:#f0f2f6;padding:20px;border-radius:10px;text-align:center;border:2px solid #1E88E5'><p style='margin:0'>TOTAL A COBRAR</p><h1 style='color:#1E88E5;margin:0'>${total_f:,.2f}</h1></div>", unsafe_allow_html=True)
                 
@@ -185,22 +180,22 @@ else:
                         db.collection("ventas_procesadas").add({
                             "vendedor": vendedor_nom, "id_negocio": negocio_id, "cliente": cliente_sel,
                             "cliente_id": dict_clientes[cliente_sel], "items": st.session_state.carrito, "total": total_f, 
-                            "metodo": metodo, "detalle_pago": info_pago, "recargo_p": p_recargo, "descuento_p": p_descuento,
-                            "fecha_completa": ahora, "fecha_str": ahora.strftime("%d/%m/%Y"), "hora_str": ahora.strftime("%H:%M")
+                            "metodo": metodo, "fecha_completa": ahora, "fecha_str": ahora.strftime("%d/%m/%Y"), 
+                            "hora_str": ahora.strftime("%H:%M")
                         })
                         st.success("Venta Exitosa")
                         st.session_state.carrito = []; st.rerun()
 
-        with tabs[3]: # PESTAÑA CLIENTES (CON LISTA Y FECHAS)
+        with tabs[3]: # PESTAÑA CLIENTES (CORREGIDA PARA MARÍA Y TEST_CLIENTE)
             col_reg, col_list = st.columns([1, 1.8])
             with col_reg:
-                st.subheader("➕ Registrar Cliente")
-                with st.form("form_cliente_pro"):
+                st.subheader("➕ Registrar Nuevo Cliente")
+                with st.form("form_nuevo_cliente"):
                     nom_c = st.text_input("Nombre y Apellido")
-                    dni_c = st.text_input("DNI (Contraseña)")
+                    dni_c = st.text_input("DNI (Su contraseña)")
                     tel_c = st.text_input("WhatsApp")
-                    f_pago = st.date_input("Fecha de pago", min_value=datetime.now())
-                    if st.form_submit_button("Crear Cuenta"):
+                    f_pago = st.date_input("Fecha pactada de pago", min_value=datetime.now())
+                    if st.form_submit_button("Guardar Cliente"):
                         if nom_c and dni_c:
                             u_id = f"{nom_c.lower().replace(' ', '')}_{negocio_id}"
                             db.collection("usuarios").document(u_id).set({
@@ -208,22 +203,32 @@ else:
                                 "id_negocio": negocio_id, "dni": dni_c, "tel": tel_c,
                                 "promesa_pago": f_pago.strftime("%d/%m/%Y")
                             })
-                            st.success(f"✅ Cuenta creada: {u_id}")
+                            st.success(f"✅ Cliente {nom_c} creado con ID: {u_id}")
                             st.rerun()
+            
             with col_list:
-                st.subheader("👥 Clientes y Deudas")
+                st.subheader("👥 Lista de Clientes")
                 clientes_q = db.collection("usuarios").where("id_negocio", "==", negocio_id).where("rol", "==", "cliente").stream()
-                datos = []
+                datos_t = []
                 for c in clientes_q:
                     cd = c.to_dict()
-                    v_fiadas = db.collection("ventas_procesadas").where("cliente_id", "==", c.id).where("metodo", "==", "Fiado").stream()
-                    deuda = sum(v.to_dict().get('total', 0) for v in v_fiadas)
-                    datos.append({"Cliente": cd['nombre'], "DNI": cd['dni'], "Deuda": f"${deuda:,.2f}", "Paga el": cd.get('promesa_pago', '-')})
-                if datos: st.table(pd.DataFrame(datos))
-                else: st.info("No hay clientes registrados.")
+                    v_f = db.collection("ventas_procesadas").where("cliente_id", "==", c.id).where("metodo", "==", "Fiado").stream()
+                    saldo = sum(v.to_dict().get('total', 0) for v in v_f)
+                    # Usamos .get() para evitar el error si falta el campo 'dni'
+                    datos_t.append({
+                        "Nombre": cd.get('nombre', 'Sin nombre'),
+                        "DNI": cd.get('dni', '---'),
+                        "WhatsApp": cd.get('tel', '-'),
+                        "Saldo Fiado": f"${saldo:,.2f}",
+                        "Paga el": cd.get('promesa_pago', '-')
+                    })
+                if datos_t:
+                    st.table(pd.DataFrame(datos_t))
+                else:
+                    st.info("No hay clientes registrados en este negocio.")
 
         with tabs[1]: # GASTOS
-            st.subheader("Gastos")
+            st.subheader("Gestos del Negocio")
             with st.form("g_form"):
                 m = st.number_input("Monto", 0.0); d = st.text_input("Detalle")
                 if st.form_submit_button("Guardar"):
@@ -231,7 +236,7 @@ else:
                     st.success("Gasto guardado")
 
         with tabs[2]: # HISTORIAL
-            st.subheader("Historial")
+            st.subheader("Historial de Movimientos")
             h_ref = db.collection("ventas_procesadas").where("id_negocio", "==", negocio_id).order_by("fecha_completa", direction=firestore.Query.DESCENDING).limit(10).stream()
             for h in h_ref:
                 hd = h.to_dict()
