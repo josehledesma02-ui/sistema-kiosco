@@ -34,15 +34,12 @@ def renderizar(db, id_negocio):
 
     tab_lista, tab_nuevo = st.tabs(["📋 Lista de Clientes", "➕ Agregar Nuevo"])
 
-    # --- PESTAÑA 1: LISTA (CORREGIDA PARA QUE MUESTRE TODO) ---
+    # --- PESTAÑA 1: LISTA Y EDICIÓN ---
     with tab_lista:
         st.markdown('<div class="sub-blue">Clientes de tu Negocio</div>', unsafe_allow_html=True)
         
         try:
-            # Traemos los clientes filtrados por tu negocio
-            # Usamos un stream directo para asegurar que lea lo último
             clientes_ref = db.collection("clientes").where("id_negocio", "==", id_negocio).stream()
-            
             lista_clientes = []
             for doc in clientes_ref:
                 datos = doc.to_dict()
@@ -50,12 +47,11 @@ def renderizar(db, id_negocio):
                 lista_clientes.append(datos)
 
             if lista_clientes:
-                # Ordenar por nombre para que sea fácil encontrarlos
                 lista_clientes = sorted(lista_clientes, key=lambda x: x.get('nombre', '').lower())
                 
                 for cli in lista_clientes:
-                    # El nombre y DNI se ven primero
                     with st.expander(f"👤 {cli['nombre']} (DNI: {cli.get('dni', 'S/D')})"):
+                        # --- VISTA DE DATOS ACTUALES ---
                         c1, c2 = st.columns(2)
                         with c1:
                             st.write(f"📞 **WhatsApp:** {cli.get('telefono', 'No asignado')}")
@@ -64,7 +60,6 @@ def renderizar(db, id_negocio):
                             st.write(f"📝 **Nota:** {cli.get('nota', '-')}")
                         
                         with c2:
-                            # Cálculo de deuda filtrado por cliente y negocio
                             ventas_fiado = db.collection("ventas_procesadas")\
                                 .where("id_negocio", "==", id_negocio)\
                                 .where("cliente_nombre", "==", cli['nombre'])\
@@ -76,18 +71,46 @@ def renderizar(db, id_negocio):
                             st.markdown("💰 **Deuda Actual:**")
                             st.markdown(f"<div class='deuda-total'>{total_f}</div>", unsafe_allow_html=True)
 
-                        # Botón para eliminar cliente
+                        st.divider()
+
+                        # --- SECCIÓN DE EDICIÓN ---
+                        # Usamos un checkbox o botón para mostrar el formulario de edición
+                        edit_key = f"edit_mode_{cli['id_doc']}"
+                        if st.checkbox("📝 Editar WhatsApp, Fecha o Nota", key=edit_key):
+                            with st.container():
+                                st.markdown("##### Modificar datos de " + cli['nombre'])
+                                nuevo_tel = st.text_input("Nuevo WhatsApp:", value=cli.get('telefono', ''), key=f"t_{cli['id_doc']}")
+                                
+                                # Intentamos parsear la fecha guardada para que aparezca en el calendario
+                                try:
+                                    fecha_val = datetime.strptime(cli.get('fecha_pago', ''), "%d/%m/%Y")
+                                except:
+                                    fecha_val = datetime.now()
+                                
+                                nueva_fecha = st.date_input("Nueva Fecha de Pago:", value=fecha_val, key=f"f_{cli['id_doc']}")
+                                nueva_nota = st.text_area("Nueva Nota:", value=cli.get('nota', ''), key=f"n_{cli['id_doc']}")
+                                
+                                if st.button("💾 Actualizar Datos", key=f"btn_upd_{cli['id_doc']}", use_container_width=True):
+                                    f_str = nueva_fecha.strftime("%d/%m/%Y")
+                                    db.collection("clientes").document(cli['id_doc']).update({
+                                        "telefono": nuevo_tel,
+                                        "fecha_pago": f_str,
+                                        "nota": nueva_nota
+                                    })
+                                    st.success("✅ Datos actualizados correctamente.")
+                                    st.rerun()
+
+                        # Botón para eliminar (al final)
                         if st.button("🗑️ Eliminar Cliente", key=f"del_cli_{cli['id_doc']}"):
                             db.collection("clientes").document(cli['id_doc']).delete()
                             st.success(f"Cliente '{cli['nombre']}' eliminado.")
                             st.rerun()
             else:
-                st.info("Aún no hay clientes registrados. Podés cargar uno en la pestaña 'Agregar Nuevo'.")
-                
+                st.info("No hay clientes registrados.")
         except Exception as e:
-            st.error(f"Error al cargar la lista: {e}")
+            st.error(f"Error al cargar: {e}")
 
-    # --- PESTAÑA 2: AGREGAR CLIENTE (SIN CAMBIOS) ---
+    # --- PESTAÑA 2: AGREGAR CLIENTE (INTACTA) ---
     with tab_nuevo:
         st.markdown('<div class="sub-blue">Registrar Nuevo Cliente y Usuario</div>', unsafe_allow_html=True)
         
@@ -111,8 +134,6 @@ def renderizar(db, id_negocio):
                 else:
                     try:
                         f_pago_str = fecha_pago.strftime("%d/%m/%Y") if fecha_pago else "No definida"
-                        
-                        # Guardar Cliente
                         db.collection("clientes").add({
                             "id_negocio": id_negocio,
                             "nombre": nombre_nuevo,
@@ -122,8 +143,6 @@ def renderizar(db, id_negocio):
                             "nota": nota_nueva,
                             "fecha_alta": datetime.now().isoformat()
                         })
-                        
-                        # Guardar Usuario (Rol automático)
                         db.collection("usuarios").add({
                             "id_negocio": id_negocio,
                             "nombre_real": nombre_nuevo,
@@ -132,9 +151,7 @@ def renderizar(db, id_negocio):
                             "rol": "cliente",
                             "fecha_creacion": datetime.now().isoformat()
                         })
-                        
-                        st.success(f"✅ ¡{nombre_nuevo} registrado! Ya puede entrar con su DNI.")
-                        # Rerun para que aparezca en la lista inmediatamente
+                        st.success(f"✅ ¡{nombre_nuevo} registrado!")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error al guardar: {e}")
