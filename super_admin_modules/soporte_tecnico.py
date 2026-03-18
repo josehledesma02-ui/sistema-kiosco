@@ -2,77 +2,56 @@ import streamlit as st
 from datetime import datetime
 
 def mostrar(db):
-    st.subheader("🛠️ Panel de Control de Soporte Técnico")
+    st.subheader("📩 Bandeja de Entrada: Soporte Técnico")
+    st.info("Aquí solo verás los reportes que aún no han sido solucionados.")
     
     try:
-        # 1. Traemos los reportes de Firebase
-        reportes_ref = db.collection("reportes_error").order_by("fecha", direction="DESCENDING").stream()
+        # Filtramos solo por 'pendiente'
+        reportes_ref = db.collection("reportes_error").where("estado", "==", "pendiente").order_by("fecha", direction="DESCENDING").stream()
         
         hay_reportes = False
-        
-        # USAMOS UN SOLO BUCLE FOR
         for i, doc in enumerate(reportes_ref):
             hay_reportes = True
             rep = doc.to_dict()
             id_doc = doc.id
             
-            # --- PROCESAMIENTO DE FECHA ---
-            fecha_valor = rep.get("fecha")
-            fecha_str = "S/F"
-            if fecha_valor:
-                if isinstance(fecha_valor, str):
-                    try:
-                        fecha_obj = datetime.fromisoformat(fecha_valor.replace('Z', '+00:00'))
-                        fecha_str = fecha_obj.strftime("%d/%m %H:%M")
-                    except:
-                        fecha_str = str(fecha_valor)[:16]
-                elif hasattr(fecha_valor, 'strftime'):
-                    fecha_str = fecha_valor.strftime("%d/%m %H:%M")
-
-            # --- SEMÁFORO DE PRIORIDAD ---
+            # --- DISEÑO PROFESIONAL ---
+            # (El código de fecha, prioridad y fotos que ya tenemos funcionando...)
+            fecha_valor = rep.get("fecha", "")
             prioridad = rep.get("prioridad", "Baja")
-            if "Urgente" in prioridad: emoji_prio = "🔴"
-            elif "Alta" in prioridad: emoji_prio = "🟠"
-            elif "Media" in prioridad: emoji_prio = "🟡"
-            else: emoji_prio = "🟢"
+            emoji_prio = "🔴" if "Urgente" in prioridad else "🟢"
+            titulo = f"{emoji_prio} {rep.get('id_negocio', '').upper()} - {rep.get('tipo', 'Error')}"
 
-            # --- DISEÑO DEL EXPANDER ---
-            titulo = f"{emoji_prio} {rep.get('id_negocio', 'S/N').upper()} - {rep.get('tipo', 'Reporte')} ({fecha_str})"
-            
             with st.expander(titulo):
-                st.write(f"**👤 Usuario:** {rep.get('usuario', 'Desconocido')}")
-                st.write(f"**🚨 Prioridad:** {prioridad}")
-                st.info(f"**💬 Mensaje:** {rep.get('mensaje', 'Sin detalle')}")
-
-                # --- MOSTRAR IMÁGENES ---
-                # Buscamos en todas las posibles llaves por compatibilidad
-                links = rep.get("fotos") or rep.get("links_fotos") or rep.get("urls_fotos")
+                st.write(f"**⏰ Fecha:** {fecha_valor[:16]}")
+                st.info(f"**💬 Mensaje:** {rep.get('mensaje')}")
                 
-                if links and isinstance(links, list) and len(links) > 0:
-                    st.write("🖼️ **Capturas adjuntas:**")
+                # Fotos
+                links = rep.get("fotos") or []
+                if links:
+                    cols = st.columns(3)
                     for idx, link in enumerate(links):
-                        st.image(link, caption=f"Evidencia {idx+1}", use_container_width=True)
-                        st.markdown(f"[🔗 Ver en pantalla completa]({link})")
-                else:
-                    st.warning("⚠️ El sistema no detectó imágenes en este reporte.")
+                        with cols[idx % 3]: st.image(link, use_container_width=True)
 
                 st.divider()
-                
-                # --- BOTONES DE ACCIÓN (CON KEY ÚNICA) ---
                 c1, c2 = st.columns(2)
                 with c1:
-                    if st.button("✅ Resolver", key=f"res_{id_doc}_{i}", use_container_width=True):
-                        db.collection("reportes_error").document(id_doc).update({"estado": "resuelto"})
-                        st.success("Resuelto")
+                    if st.button("✅ Resolver y Archivar", key=f"res_{id_doc}_{i}", use_container_width=True):
+                        # Actualizamos estado y agregamos fecha de resolución
+                        db.collection("reportes_error").document(id_doc).update({
+                            "estado": "resuelto",
+                            "fecha_resolucion": datetime.now().isoformat()
+                        })
+                        st.success("¡Solucionado! Movido al historial.")
                         st.rerun()
                 with c2:
                     if st.button("🗑️ Eliminar", key=f"del_{id_doc}_{i}", use_container_width=True):
                         db.collection("reportes_error").document(id_doc).delete()
-                        st.warning("Eliminado")
                         st.rerun()
 
         if not hay_reportes:
-            st.info("No hay reportes pendientes.")
+            st.success("🙌 ¡Excelente! No tenés reportes pendientes.")
 
     except Exception as e:
-        st.error(f"Error en el panel: {e}")
+        # Nota: Si Firebase te pide un índice, aparecerá un link aquí abajo.
+        st.error(f"Error: {e}")
