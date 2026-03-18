@@ -49,7 +49,7 @@ st.markdown("""
 db = conectar_firebase()
 ahora = obtener_hora_argentina()
 
-# --- LOGICA DE LOGIN CORREGIDA (PARA CLIENTES Y DUEÑO) ---
+# --- LÓGICA DE LOGIN CORREGIDA (COPIAR Y PEGAR ESTO) ---
 with st.form("login_form"):
     id_neg_input = st.text_input("🆔 ID del Negocio").strip()
     user_input = st.text_input("👤 Usuario (Nombre y Apellido)").strip()
@@ -77,13 +77,13 @@ with st.form("login_form"):
                 clave_input = pass_input.strip()
                 
                 if (input_cliente == nombre_db or input_cliente == usuario_db) and clave_input == clave_db:
-                    # Si coincide, actualizamos la sesión con los datos reales de Firebase
+                    # Si coincide, actualizamos la sesión
                     st.session_state.update({
                         'autenticado': True,
                         'rol': u.get("rol"),
                         'usuario_id': doc.id,
-                        'nombre_real': u.get("nombre_real"), # Guardamos el nombre tal cual está en la DB
-                        'id_negocio': id_negocio_input
+                        'nombre_real': u.get("nombre_real"),
+                        'id_negocio': id_neg_input  # <--- ACÁ ESTABA EL ERROR, YA ESTÁ CORREGIDO
                     })
                     encontrado = True
                     st.success(f"✅ Bienvenido, {u.get('nombre_real')}")
