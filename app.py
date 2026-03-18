@@ -102,14 +102,13 @@ else:
     with st.sidebar:
         if os.path.exists(IMG_SIDEBAR): st.image(IMG_SIDEBAR, width=150)
         st.write(f"👤 **{vendedor_nom}**")
-        st.write(f"🔑 Rol detectado: **{rol_actual}**")
         if st.button("🔴 Cerrar Sesión", use_container_width=True): 
             for key in list(st.session_state.keys()): del st.session_state[key]
             st.rerun()
 
     mostrar_titulo()
 
-    # --- CAMBIO CLAVE AQUÍ: BUSCAMOS 'negocio' SEGÚN TU FIREBASE ---
+    # --- VISTA NEGOCIO ---
     if rol_actual == "negocio":
         tabs = st.tabs(["🛒 Ventas", "📉 Gastos", "📜 Historial", "👥 Clientes"])
 
@@ -185,7 +184,7 @@ else:
                 with st.expander(f"{hd.get('fecha_str', '')} | {hd.get('cliente', '')} | ${hd.get('total', 0):,.2f}"):
                     for i in hd.get('items', []): st.write(f"- {i['cantidad']}x {i['nombre']}")
 
-        with tabs[3]: # CLIENTES
+        with tabs[3]: # CLIENTES (LISTA DE CUENTAS)
             col_reg, col_list = st.columns([1, 2.5])
             with col_reg:
                 st.subheader("➕ Nuevo Cliente")
@@ -209,14 +208,18 @@ else:
                     saldo = sum(v.to_dict().get('total', 0) for v in v_f) - sum(p.to_dict().get('monto', 0) for p in p_f)
                     with st.expander(f"👤 {cd.get('nombre')} | Saldo: ${saldo:,.2f}"):
                         c_i, c_p = st.columns([1.5, 1])
-                        c_i.write(f"**DNI:** {cd.get('dni')} | **Promesa:** {cd.get('promesa_pago', '---')}")
-                        m_entega = c_p.number_input("Ingresar entrega $", 0.0, key=f"p_{c.id}")
-                        if c_p.button("Registrar Pago", key=f"btn_{c.id}"):
-                            if m_entega > 0:
-                                db.collection("pagos_clientes").add({"cliente_id": c.id, "monto": m_entega, "fecha": datetime.now(), "fecha_str": datetime.now().strftime("%d/%m/%Y"), "hora_str": datetime.now().strftime("%H:%M"), "id_negocio": negocio_id})
-                                st.rerun()
+                        with c_i:
+                            # AQUÍ VOLVÍ A AGREGAR EL WHATSAPP (tel)
+                            st.write(f"**DNI:** {cd.get('dni', '---')} | **WA:** {cd.get('tel', '---')}")
+                            st.write(f"**Promesa:** :blue[{cd.get('promesa_pago', '---')}]")
+                        
+                        with c_p:
+                            m_entrega = st.number_input("Ingresar entrega $", 0.0, key=f"p_{c.id}")
+                            if st.button("Registrar Pago", key=f"btn_{c.id}", use_container_width=True):
+                                if m_entrega > 0:
+                                    db.collection("pagos_clientes").add({"cliente_id": c.id, "monto": m_entrega, "fecha": datetime.now(), "fecha_str": datetime.now().strftime("%d/%m/%Y"), "hora_str": datetime.now().strftime("%H:%M"), "id_negocio": negocio_id})
+                                    st.success("Registrado"); st.rerun()
                         st.divider()
-                        # MOVIMIENTOS DETALLADOS
                         movs = []
                         for v in v_f:
                             vd = v.to_dict()
@@ -225,10 +228,10 @@ else:
                         for p in p_f:
                             pd = p.to_dict()
                             movs.append({"dt": pd.get('fecha'), "t": f"🟢 {pd['fecha_str']} - Pago: ${pd['monto']}", "s": "Entrega efectivo"})
-                        for m in sorted(movs, key=lambda x: x['dt'], reverse=True):
+                        for m in sorted(movs, key=lambda x: x['dt'] if x['dt'] else datetime.min, reverse=True):
                             st.write(m['t']); st.caption(m['s'])
 
-    # SI ES CLIENTE
+    # --- VISTA CLIENTE ---
     elif rol_actual == "cliente":
         c_id = st.session_state['usuario']
         v_f = list(db.collection("ventas_procesadas").where("cliente_id", "==", c_id).where("metodo", "==", "Fiado").stream())
@@ -246,5 +249,6 @@ else:
         for p in p_f:
             pd = p.to_dict()
             movs.append({"dt": pd.get('fecha'), "t": f"✅ Pago {pd.get('fecha_str')}", "m": f"+ ${pd.get('monto')}", "s": "Entrega de dinero"})
-        for m in sorted(movs, key=lambda x: x['dt'], reverse=True):
+        for m in sorted(movs, key=lambda x: x['dt'] if x['dt'] else datetime.min, reverse=True):
             st.write(f"**{m['t']}** | {m['s']} | **{m['m']}**")
+            st.divider()
