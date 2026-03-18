@@ -27,6 +27,7 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
         st.error(f"❌ Error al leer Excel: {e}")
         return
 
+    # --- DISEÑO DE COLUMNAS ---
     col_izq, col_der = st.columns([1.3, 1])
 
     if 'carrito' not in st.session_state:
@@ -52,58 +53,68 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
                     "subtotal": precio_u * cant
                 })
                 st.rerun()
-
-    with col_der:
-        st.subheader("🧾 Ticket")
+        
+        # --- TABLA DEL CARRITO (MOVIDA AQUÍ ABAJO) ---
+        st.divider()
+        st.subheader("📋 Detalle de la compra")
         if st.session_state.carrito:
             df_c = pd.DataFrame(st.session_state.carrito)
-            st.table(df_c[['nombre', 'cantidad', 'subtotal']])
-            
+            st.dataframe(df_c[['nombre', 'cantidad', 'subtotal']], use_container_width=True, hide_index=True)
+            if st.button("🗑️ Vaciar Carrito"):
+                st.session_state.carrito = []
+                st.rerun()
+        else:
+            st.info("No hay productos en el ticket.")
+
+    with col_der:
+        st.subheader("💰 Finalizar Venta")
+        if st.session_state.carrito:
+            df_c = pd.DataFrame(st.session_state.carrito)
             suma_productos = df_c['subtotal'].sum()
             
-            st.divider()
-            # --- SECCIÓN DE DESCUENTOS / RECARGOS ---
-            st.write("### Ajustes")
-            tipo_ajuste = st.radio("Aplicar:", ["Ninguno", "Descuento (%)", "Recargo (%)"], horizontal=True)
-            porcentaje = 0.0
-            if tipo_ajuste != "Ninguno":
-                porcentaje = st.number_input(f"Porcentaje de {tipo_ajuste.lower()}:", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
+            # --- SECCIÓN DE DESCUENTOS / RECARGOS (LIMPIA) ---
+            c_desc, c_rec = st.columns(2)
+            with c_desc:
+                porcentaje_desc = st.number_input("Descuento %", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
+            with c_rec:
+                porcentaje_rec = st.number_input("Recargo %", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
             
-            # Cálculo del ajuste
-            monto_ajuste = (suma_productos * (porcentaje / 100))
-            if tipo_ajuste == "Descuento (%)":
-                total_final = suma_productos - monto_ajuste
-                st.write(f"📉 Descuento aplicado: -${monto_ajuste:,.2f}")
-            elif tipo_ajuste == "Recargo (%)":
-                total_final = suma_productos + monto_ajuste
-                st.write(f"📈 Recargo aplicado: +${monto_ajuste:,.2f}")
-            else:
-                total_final = suma_productos
+            # Cálculos
+            monto_descuento = (suma_productos * (porcentaje_desc / 100))
+            monto_recargo = (suma_productos * (porcentaje_rec / 100))
+            
+            total_final = suma_productos - monto_descuento + monto_recargo
+            
+            # Mostrar avisos de ajustes si existen
+            if monto_descuento > 0:
+                st.write(f"📉 Descuento aplicado: -${monto_descuento:,.2f}")
+            if monto_recargo > 0:
+                st.write(f"📈 Recargo aplicado: +${monto_recargo:,.2f}")
 
             total_mostrar = f"${total_final:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
             st.markdown(f"## TOTAL: {total_mostrar}")
             
-            # --- MEDIOS DE PAGO ACTUALIZADOS ---
+            # --- MEDIOS DE PAGO ---
             metodo = st.selectbox("Medio de Pago:", ["Efectivo", "Débito", "Crédito", "Transferencia", "Fiado"])
             
             detalles_pago = ""
             if metodo == "Transferencia":
-                detalles_pago = st.text_input("Nombre de la cuenta / Banco destino:", placeholder="Ej: Mercado Pago - Mi Kiosco")
+                detalles_pago = st.text_input("¿A qué cuenta transfirieron?", placeholder="Ej: MP Jose, Galicia, etc.")
             
             cliente = "Consumidor Final"
             if metodo == "Fiado":
-                cliente = st.text_input("Nombre/DNI del Cliente:", placeholder="Ej: Juan Perez")
+                cliente = st.text_input("Nombre/DNI del Cliente (Obligatorio):")
 
-            if st.button("🚀 FINALIZAR VENTA", type="primary", use_container_width=True):
+            if st.button("🚀 CONFIRMAR VENTA", type="primary", use_container_width=True):
                 if metodo == "Fiado" and not cliente:
-                    st.warning("⚠️ El nombre del cliente es obligatorio para ventas al fiado.")
+                    st.warning("⚠️ Debes ingresar el nombre del cliente para fiar.")
                 else:
                     venta_data = {
                         "id_negocio": id_negocio,
                         "vendedor": nombre_u,
                         "subtotal_base": suma_productos,
-                        "ajuste_tipo": tipo_ajuste,
-                        "ajuste_porcentaje": porcentaje,
+                        "descuento_p": porcentaje_desc,
+                        "recargo_p": porcentaje_rec,
                         "total": total_final,
                         "metodo": metodo,
                         "detalles_pago": detalles_pago,
@@ -115,12 +126,11 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
                     }
                     db.collection("ventas_procesadas").add(venta_data)
                     st.session_state.carrito = []
-                    st.success("✅ Venta Guardada")
+                    st.success("✅ ¡Venta guardada!")
                     st.balloons()
                     st.rerun()
-            
-            if st.button("🗑️ Vaciar Carrito"):
-                st.session_state.carrito = []
-                st.rerun()
         else:
-            st.info("Carrito vacío")
+            st.write("Esperando productos...")
+
+    st.divider()
+    st.caption(f"Vendedor: {nombre_u} | ID: {id_negocio}")
