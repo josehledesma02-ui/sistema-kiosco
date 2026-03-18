@@ -1,5 +1,5 @@
 streamlit
 firebase-admin
 pandas
-streamlit-cookies-manager
-google-auth
+pytz
+plotly
