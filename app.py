@@ -2,7 +2,7 @@ import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 import os
 
@@ -15,8 +15,11 @@ def obtener_hora_argentina():
     zona_ar = pytz.timezone('America/Argentina/Buenos_Aires')
     return datetime.now(zona_ar)
 
+# URL apuntando específicamente a "Hoja 1"
 ID_HOJA = "1-ay_xIqYItwOaXe80VUsEmh4gsANrk9PH72aZcUD54g"
-URL_PROVEEDOR_CSV = f"https://docs.google.com/spreadsheets/d/{ID_HOJA}/export?format=csv"
+NOMBRE_HOJA = "Hoja 1"
+URL_PROVEEDOR_CSV = f"https://docs.google.com/spreadsheets/d/{ID_HOJA}/gviz/tq?tqx=out:csv&sheet={NOMBRE_HOJA.replace(' ', '%20')}"
+
 IMG_LOGIN = "logo.png" 
 IMG_SIDEBAR = "logo_chico.png"
 
@@ -95,8 +98,8 @@ else:
         
         if rol_u == "cliente":
             st.write(f"📅 **Fecha de pago:** {f_pago}")
-            st.divider()
         
+        st.divider()
         if st.button("🔴 Cerrar Sesión", use_container_width=True): 
             for key in list(st.session_state.keys()): del st.session_state[key]
             st.rerun()
@@ -114,8 +117,14 @@ else:
         st.error(f"# Tu saldo actual: ${saldo:,.2f}")
 
         with st.container(border=True):
-            st.markdown(f"### 📝 Nota sobre tu cuenta:\nUsted se ha comprometido a cancelar el total de su deuda el día **{f_pago}**.")
-            st.markdown("* **Si cumple:** Se mantienen los precios originales.\n* **Si no cumple:** Los valores se actualizarán al precio actual.")
+            st.markdown(f"""
+            ### 📝 Nota sobre tu cuenta:
+            Usted se ha comprometido a cancelar el total de su deuda el día **{f_pago}**. 
+            *   **Si cumple con el pago total:** Se le mantienen los precios originales de compra.
+            *   **Si no cumple o deja saldo:** Los valores de los productos se actualizarán automáticamente según el precio de venta actual en el local.
+            
+            **Por favor, para mantener este beneficio, no deje saldo pendiente.**
+            """)
 
         st.subheader("📜 Detalle de Movimientos")
         movs = []
@@ -128,7 +137,8 @@ else:
                 d = m['d']
                 if m['tipo'] == "C":
                     st.markdown(f"### 🛒 Compra: {d.get('fecha_str')} - {d.get('hora_str')}hs")
-                    for i in d.get('items', []): st.write(f"📍 {i['cantidad']} x {i['nombre']} (${i['subtotal']:,.2f})")
+                    for i in d.get('items', []):
+                        st.write(f"📍 **{i['cantidad']}** x {i['nombre']} (${i['subtotal']:,.2f})")
                     st.markdown(f"<h2 style='color:red;'>- ${d.get('total', 0):,.2f}</h2>", unsafe_allow_html=True)
                 else:
                     st.markdown(f"### ✅ Pago Recibido: {d.get('fecha_str')} - {d.get('hora_str')}hs")
@@ -138,24 +148,34 @@ else:
     elif rol_u == "negocio":
         tabs = st.tabs(["🛒 Ventas", "📉 Gastos", "📜 Historial", "👥 Clientes"])
         
-        with tabs[0]: 
+        with tabs[0]: # VENTAS
             if st.session_state.df_proveedor is None:
-                df_raw = pd.read_csv(URL_PROVEEDOR_CSV)
-                df_raw.columns = df_raw.columns.str.strip() # QUITA ESPACIOS EXTRAS
-                st.session_state.df_proveedor = df_raw
-            
+                try:
+                    # Leemos desde la fila 2 para saltar encabezados de fantasía
+                    df_raw = pd.read_csv(URL_PROVEEDOR_CSV, header=1)
+                    # Eliminamos columnas y filas que sean todo NaN (vacías)
+                    df_raw = df_raw.dropna(axis=1, how='all').dropna(axis=0, how='all')
+                    # Limpiamos nombres de columnas por si tienen espacios
+                    df_raw.columns = df_raw.columns.str.strip()
+                    st.session_state.df_proveedor = df_raw
+                except:
+                    st.error("Error al leer la Hoja 1.")
+
             df = st.session_state.df_proveedor
-            
-            # CONTROL DE SEGURIDAD PARA LAS COLUMNAS
-            if 'Productos' in df.columns and 'Precio' in df.columns:
-                prod_sel = st.selectbox("Seleccionar Producto", df['Productos'].unique())
-                cant = st.number_input("Cantidad", min_value=0.1, value=1.0, step=0.1)
+            if df is not None:
+                # Usamos los nombres que me diste: Productos y Precio
+                # Si fallan, usamos la posición (0 para Productos, 2 para Precio)
+                c_prod = 'Productos' if 'Productos' in df.columns else df.columns[0]
+                c_pre = 'Precio' if 'Precio' in df.columns else df.columns[2]
+
+                st.subheader("Nueva Venta")
+                p_sel = st.selectbox("Seleccionar Producto", df[c_prod].dropna().unique())
+                cant = st.number_input("Cantidad", min_value=0.1, value=1.0)
                 
-                if st.button("Agregar al Carrito"):
-                    precio_unit = df[df['Productos'] == prod_sel]['Precio'].values[0]
+                if st.button("Añadir al Carrito"):
+                    val_pre = df[df[c_prod] == p_sel][c_pre].values[0]
                     st.session_state.carrito.append({
-                        'nombre': prod_sel, 'cantidad': cant, 
-                        'precio': float(precio_unit), 'subtotal': float(precio_unit) * cant
+                        'nombre': p_sel, 'cantidad': cant, 'precio': float(val_pre), 'subtotal': float(val_pre) * cant
                     })
                 
                 if st.session_state.carrito:
@@ -181,10 +201,8 @@ else:
                         st.session_state.carrito = []
                         st.success("Venta Guardada")
                         st.rerun()
-            else:
-                st.error(f"Error: No se encuentran las columnas. Columnas detectadas: {list(df.columns)}")
 
-        with tabs[1]:
+        with tabs[1]: # GASTOS
             st.subheader("Gastos")
             desc_g = st.text_input("Concepto")
             monto_g = st.number_input("Monto", min_value=0.0)
@@ -196,20 +214,19 @@ else:
                 })
                 st.success("Gasto registrado")
 
-        with tabs[2]:
-            st.subheader("Ventas registradas")
+        with tabs[2]: # HISTORIAL
+            st.subheader("Ventas")
             h_ventas = db.collection("ventas_procesadas").where("id_negocio", "==", neg_id).stream()
             lista_h = [{"Fecha": v.to_dict().get('fecha_str'), "Hora": v.to_dict().get('hora_str'), "Método": v.to_dict().get('metodo'), "Total": v.to_dict().get('total')} for v in h_ventas]
             if lista_h: st.table(pd.DataFrame(lista_h))
 
-        with tabs[3]:
-            st.subheader("Nuevo Cliente")
+        with tabs[3]: # CLIENTES
+            st.subheader("Clientes")
             nc_nom = st.text_input("Nombre y Apellido")
-            nc_dni = st.text_input("DNI (Clave)")
-            nc_f = st.text_input("Fecha de Pago (DD/MM/AAAA)")
+            nc_dni = st.text_input("DNI")
+            nc_f = st.text_input("Fecha Pago")
             if st.button("Guardar Cliente"):
                 db.collection("usuarios").add({
-                    'id_negocio': neg_id, 'nombre': nc_nom, 'password': nc_dni, 
-                    'rol': 'cliente', 'promesa_pago': nc_f
+                    'id_negocio': neg_id, 'nombre': nc_nom, 'password': nc_dni, 'rol': 'cliente', 'promesa_pago': nc_f
                 })
                 st.success("Cliente creado!")
