@@ -107,7 +107,7 @@ else:
     mostrar_titulo()
     tabs = st.tabs(["🛒 Ventas", "📉 Gastos", "📜 Historial", "👥 Clientes"])
 
-    with tabs[0]: # PESTAÑA VENTAS (BLOQUEADA - NO TOCAR)
+    with tabs[0]: # VENTAS (BLOQUEADA POR PEDIDO DEL USUARIO)
         col_izq, col_der = st.columns([1.6, 1])
         with col_izq:
             busqueda = st.text_input("🔍 Buscar producto...", placeholder="Ej: Aceite...")
@@ -163,13 +163,13 @@ else:
                     })
                     st.session_state.carrito = []; st.success("Venta Exitosa"); st.rerun()
 
-    with tabs[3]: # PESTAÑA CLIENTES
-        col_reg, col_list = st.columns([1, 2])
+    with tabs[3]: # PESTAÑA CLIENTES (REHECHA TOTALMENTE)
+        col_reg, col_list = st.columns([1, 2.5])
         with col_reg:
             st.subheader("➕ Nuevo Cliente")
             with st.form("form_nuevo_cliente"):
                 nom_c = st.text_input("Nombre y Apellido")
-                dni_c = st.text_input("DNI (Su contraseña)")
+                dni_c = st.text_input("DNI")
                 tel_c = st.text_input("WhatsApp")
                 f_pago = st.text_input("Acuerdo de pago (Ej: Los 05)")
                 if st.form_submit_button("Guardar Cliente"):
@@ -178,24 +178,78 @@ else:
                         db.collection("usuarios").document(u_id).set({
                             "nombre": nom_c, "password": dni_c, "rol": "cliente",
                             "id_negocio": negocio_id, "dni": dni_c, "tel": tel_c,
-                            "fecha_acuerdo_pago": f_pago
+                            "acuerdo": f_pago # Nombre unificado
                         })
                         st.success(f"✅ Cliente guardado"); st.rerun()
+
         with col_list:
-            st.subheader("👥 Estado de Deudas")
+            st.subheader("👥 Cuentas Corrientes")
             clis = db.collection("usuarios").where("id_negocio", "==", negocio_id).where("rol", "==", "cliente").stream()
+            
             for c in clis:
                 cd = c.to_dict()
-                v_f = db.collection("ventas_procesadas").where("cliente_id", "==", c.id).where("metodo", "==", "Fiado").stream()
-                lista_v = [v for v in v_f]
-                deuda = sum(v.to_dict().get('total', 0) for v in lista_v)
-                with st.expander(f"👤 {cd.get('nombre')} | 💰 Deuda: ${deuda:,.2f}"):
-                    st.write(f"**DNI:** {cd.get('dni', '---')} | **WhatsApp:** {cd.get('tel', '-')}")
-                    st.write(f"**Acuerdo:** {cd.get('fecha_acuerdo_pago', '-')}")
-                    if deuda > 0:
-                        if st.button(f"✅ Liquidar Deuda (${deuda:,.2f})", key=f"p_{c.id}"):
-                            for v in lista_v: db.collection("ventas_procesadas").document(v.id).update({"metodo": "Pagado (Antes Fiado)"})
-                            st.rerun()
+                c_id = c.id
+                
+                # Obtener Ventas Fiadas y Pagos
+                ventas_f = list(db.collection("ventas_procesadas").where("cliente_id", "==", c_id).where("metodo", "==", "Fiado").stream())
+                pagos_f = list(db.collection("pagos_clientes").where("cliente_id", "==", c_id).stream())
+                
+                total_deuda = sum(v.to_dict().get('total', 0) for v in ventas_f)
+                total_pagos = sum(p.to_dict().get('monto', 0) for p in pagos_f)
+                saldo_pendiente = total_deuda - total_pagos
+                
+                # Encabezado minimizado
+                with st.expander(f"👤 {cd.get('nombre')} | Saldo: ${saldo_pendiente:,.2f}"):
+                    # Información de contacto y Acuerdo
+                    c_info, c_pago_form = st.columns([1.5, 1])
+                    with c_info:
+                        st.markdown(f"**DNI:** {cd.get('dni', '---')} | **WA:** {cd.get('tel', '---')}")
+                        # Mostramos el acuerdo buscando ambos nombres de campo por si acaso
+                        acuerdo_val = cd.get('acuerdo') or cd.get('fecha_acuerdo_pago') or "No definido"
+                        st.markdown(f"**📅 Acordó pagar:** {acuerdo_val}")
+                    
+                    with c_pago_form:
+                        monto_abono = st.number_input("Ingresar monto de pago $", 0.0, key=f"pago_{c_id}")
+                        if st.button("Registrar Entrega", key=f"btn_pago_{c_id}", use_container_width=True):
+                            if monto_abono > 0:
+                                ah = datetime.now()
+                                db.collection("pagos_clientes").add({
+                                    "cliente_id": c_id, "monto": monto_abono, "fecha": ah,
+                                    "fecha_str": ah.strftime("%d/%m/%Y"), "hora_str": ah.strftime("%H:%M"),
+                                    "id_negocio": negocio_id
+                                })
+                                st.success(f"Registrado: ${monto_abono}"); st.rerun()
+
+                    st.divider()
+                    st.markdown("#### 📜 Detalle de la Cuenta (Movimientos)")
+                    
+                    # Armamos la lista para mostrar
+                    movs = []
+                    for v in ventas_f:
+                        vd = v.to_dict()
+                        items_str = ", ".join([f"{i['cantidad']}x {i['nombre']}" for i in vd.get('items', [])])
+                        movs.append({
+                            "fecha_dt": vd.get('fecha_completa', datetime.now()),
+                            "texto": f"🔴 {vd.get('fecha_str')} {vd.get('hora_str')} - **COMPRA**: ${vd['total']:,.2f}",
+                            "sub": f"Llevó: {items_str}"
+                        })
+                    for p in pagos_f:
+                        pd = p.to_dict()
+                        movs.append({
+                            "fecha_dt": pd.get('fecha', datetime.now()),
+                            "texto": f"🟢 {pd.get('fecha_str')} {pd.get('hora_str')} - **PAGO**: ${pd['monto']:,.2f}",
+                            "sub": "Entrega de efectivo"
+                        })
+                    
+                    # Ordenar por fecha real para que el detalle sea exacto
+                    movs_sorted = sorted(movs, key=lambda x: x['fecha_dt'], reverse=True)
+                    
+                    if movs_sorted:
+                        for m in movs_sorted:
+                            st.write(m['texto'])
+                            st.caption(m['sub'])
+                    else:
+                        st.info("No hay movimientos en esta cuenta.")
 
     with tabs[1]: # GASTOS
         st.subheader("Gastos")
@@ -206,8 +260,8 @@ else:
                 st.success("Gasto guardado")
 
     with tabs[2]: # HISTORIAL
-        st.subheader("Historial")
-        h_ref = db.collection("ventas_procesadas").where("id_negocio", "==", negocio_id).order_by("fecha_completa", direction=firestore.Query.DESCENDING).limit(10).stream()
+        st.subheader("Historial General")
+        h_ref = db.collection("ventas_procesadas").where("id_negocio", "==", negocio_id).order_by("fecha_completa", direction=firestore.Query.DESCENDING).limit(15).stream()
         for h in h_ref:
             hd = h.to_dict()
             with st.expander(f"{hd['fecha_str']} | {hd['cliente']} | ${hd['total']:,.2f}"):
