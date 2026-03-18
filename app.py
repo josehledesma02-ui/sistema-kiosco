@@ -1,3 +1,9 @@
+import streamlit as st  # <--- ESTA LÍNEA ES LA QUE FALTA O ESTÁ ABAJO
+from database import conectar_firebase, obtener_hora_argentina
+import login
+import vistas_dueno
+import vistas_cliente
+
 # ==========================================
 # 1. CONFIGURACIÓN VISUAL PRO (UI/UX)
 # ==========================================
