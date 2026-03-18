@@ -58,24 +58,32 @@ def mostrar(db):
                 st.divider()
                 
                 # --- BOTONES DE ACCIÓN ---
+                # --- BUSCAMOS TODOS LOS REPORTES ---
+        hay_reportes = False
+        for i, doc in enumerate(reportes_ref): # Agregamos 'i' para que sea un número único
+            hay_reportes = True
+            rep = doc.to_dict()
+            id_doc = doc.id
+            
+            # ... (todo el código anterior de fecha, prioridad y fotos) ...
+
+            with st.expander(titulo):
+                # ... (toda la info del reporte) ...
+
+                st.divider()
+                
+                # --- BOTONES DE ACCIÓN (CON KEY ÚNICA) ---
                 c1, c2 = st.columns(2)
                 with c1:
-                    if st.button("✅ Resolver", key=f"res_{id_doc}"):
+                    # Usamos el ID del doc + el índice del loop para que sea ÚNICO
+                    if st.button("✅ Resolver", key=f"res_{id_doc}_{i}", use_container_width=True):
                         db.collection("reportes_error").document(id_doc).update({"estado": "resuelto"})
+                        st.success("Resuelto")
                         st.rerun()
                 with c2:
-                    if st.button("🗑️ Eliminar", key=f"del_{id_doc}"):
+                    if st.button("🗑️ Eliminar", key=f"del_{id_doc}_{i}", use_container_width=True):
                         db.collection("reportes_error").document(id_doc).delete()
-                        st.rerun()
-                # --- BOTONES DE ACCIÓN ---
-                c1, c2 = st.columns(2)
-                with c1:
-                    if st.button("✅ Resolver", key=f"res_{id_doc}"):
-                        db.collection("reportes_error").document(id_doc).update({"estado": "resuelto"})
-                        st.rerun()
-                with c2:
-                    if st.button("🗑️ Eliminar", key=f"del_{id_doc}"):
-                        db.collection("reportes_error").document(id_doc).delete()
+                        st.warning("Eliminado")
                         st.rerun()
 
         if not hay_reportes:
