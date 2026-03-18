@@ -5,16 +5,18 @@ def mostrar(db):
     st.subheader("🛠️ Panel de Control de Soporte Técnico")
     
     try:
-        # Traemos todos los reportes
+        # 1. Traemos los reportes de Firebase
         reportes_ref = db.collection("reportes_error").order_by("fecha", direction="DESCENDING").stream()
         
         hay_reportes = False
-        for doc in reportes_ref:
+        
+        # USAMOS UN SOLO BUCLE FOR
+        for i, doc in enumerate(reportes_ref):
             hay_reportes = True
             rep = doc.to_dict()
             id_doc = doc.id
             
-            # 1. PROCESAMIENTO DE FECHA (Igual al anterior)
+            # --- PROCESAMIENTO DE FECHA ---
             fecha_valor = rep.get("fecha")
             fecha_str = "S/F"
             if fecha_valor:
@@ -27,15 +29,14 @@ def mostrar(db):
                 elif hasattr(fecha_valor, 'strftime'):
                     fecha_str = fecha_valor.strftime("%d/%m %H:%M")
 
-            # 2. SEMÁFORO DE PRIORIDAD (Con respaldo si no existe el campo)
+            # --- SEMÁFORO DE PRIORIDAD ---
             prioridad = rep.get("prioridad", "Baja")
-            # Mapeo manual por si el texto no coincide exacto
             if "Urgente" in prioridad: emoji_prio = "🔴"
             elif "Alta" in prioridad: emoji_prio = "🟠"
             elif "Media" in prioridad: emoji_prio = "🟡"
             else: emoji_prio = "🟢"
 
-      # --- DISEÑO DEL EXPANDER ---
+            # --- DISEÑO DEL EXPANDER ---
             titulo = f"{emoji_prio} {rep.get('id_negocio', 'S/N').upper()} - {rep.get('tipo', 'Reporte')} ({fecha_str})"
             
             with st.expander(titulo):
@@ -43,12 +44,12 @@ def mostrar(db):
                 st.write(f"**🚨 Prioridad:** {prioridad}")
                 st.info(f"**💬 Mensaje:** {rep.get('mensaje', 'Sin detalle')}")
 
-                # --- MOSTRAR IMÁGENES (Corregido) ---
+                # --- MOSTRAR IMÁGENES ---
+                # Buscamos en todas las posibles llaves por compatibilidad
                 links = rep.get("fotos") or rep.get("links_fotos") or rep.get("urls_fotos")
                 
                 if links and isinstance(links, list) and len(links) > 0:
                     st.write("🖼️ **Capturas adjuntas:**")
-                    # Mostramos las imágenes una debajo de la otra
                     for idx, link in enumerate(links):
                         st.image(link, caption=f"Evidencia {idx+1}", use_container_width=True)
                         st.markdown(f"[🔗 Ver en pantalla completa]({link})")
@@ -57,25 +58,9 @@ def mostrar(db):
 
                 st.divider()
                 
-                # --- BOTONES DE ACCIÓN ---
-                # --- BUSCAMOS TODOS LOS REPORTES ---
-        hay_reportes = False
-        for i, doc in enumerate(reportes_ref): # Agregamos 'i' para que sea un número único
-            hay_reportes = True
-            rep = doc.to_dict()
-            id_doc = doc.id
-            
-            # ... (todo el código anterior de fecha, prioridad y fotos) ...
-
-            with st.expander(titulo):
-                # ... (toda la info del reporte) ...
-
-                st.divider()
-                
                 # --- BOTONES DE ACCIÓN (CON KEY ÚNICA) ---
                 c1, c2 = st.columns(2)
                 with c1:
-                    # Usamos el ID del doc + el índice del loop para que sea ÚNICO
                     if st.button("✅ Resolver", key=f"res_{id_doc}_{i}", use_container_width=True):
                         db.collection("reportes_error").document(id_doc).update({"estado": "resuelto"})
                         st.success("Resuelto")
