@@ -52,7 +52,7 @@ div[data-baseweb="popover"] ul {
 /* Efecto hover sobre las opciones de la lista */
 div[data-baseweb="popover"] li:hover {
     background-color: #2e3b4e !important; /* Un poco más claro al pasar el mouse */
-    color: white !important;"""
+    color: white !important;
 }
 
 # ==========================================
