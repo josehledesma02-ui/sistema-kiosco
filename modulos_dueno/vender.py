@@ -1,26 +1,24 @@
 import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
+import time
 
 def renderizar(db, id_negocio, ahora_ar, nombre_u):
-    # Estilos para que todo quede centrado y la letra grande
+    # Estilos visuales
     st.markdown("""
         <style>
             .stButton > button {
                 border: none !important;
                 background: transparent !important;
                 color: #FF4B4B !important;
-                font-size: 20px !important;
-                padding: 0 !important;
-            }
-            .stButton > button:hover {
-                color: #990000 !important;
-                background: #FFEDED !important;
+                font-size: 22px !important;
+                font-weight: bold !important;
             }
             .precio-grande {
-                font-size: 18px;
+                font-size: 19px;
                 font-weight: bold;
                 text-align: right;
+                color: #2E7D32;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -43,7 +41,7 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
             except: return 0.0
         df_p['PRECIO'] = df_p['PRECIO'].apply(limpiar_precio)
     except Exception as e:
-        st.error(f"❌ Error al leer Excel: {e}")
+        st.error(f"❌ Error al conectar con Excel: {e}")
         return
 
     col_izq, col_der = st.columns([1.3, 1])
@@ -59,16 +57,15 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
         if seleccion:
             precio_u = df_p[df_p['PRODUCTOS'] == seleccion]['PRECIO'].values[0]
             precio_f = f"${precio_u:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-            st.write(f"**Precio Unitario: {precio_f}**")
+            st.markdown(f"**Precio Unitario: {precio_f}**")
             
             cant = st.number_input("Cantidad:", min_value=1, value=1, step=1)
             
             if st.button("➕ Agregar al Carrito", use_container_width=True):
-                # Usamos un ID único para cada item del carrito para que no se borren en cadena
-                import time
-                item_id = str(time.time()) 
+                # Generamos un ID único usando el tiempo actual
+                nuevo_id = str(time.time()).replace(".", "")
                 st.session_state.carrito.append({
-                    "id": item_id,
+                    "id": nuevo_id,
                     "nombre": seleccion,
                     "cantidad": cant,
                     "precio": precio_u,
@@ -79,15 +76,19 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
         st.divider()
         st.subheader("📋 Detalle de la compra")
         
-        # --- NUEVA LÓGICA DE BORRADO INDIVIDUAL ---
         if st.session_state.carrito:
-            # Hacemos una copia para iterar sin errores
+            # Usamos una lista para marcar qué borrar y evitar errores de índice
+            indice_a_borrar = None
+            
             for i, item in enumerate(st.session_state.carrito):
+                # SEGURIDAD: Si por error un item viejo no tiene ID, se lo creamos ahora
+                if "id" not in item:
+                    item["id"] = f"old_{i}"
+
                 c1, c2, c3, c4 = st.columns([3, 1, 1.5, 0.4])
                 with c1:
                     st.write(f"**{item['nombre']}**")
                 with c2:
-                    # Si cambias la cantidad, actualizamos
                     nueva_q = st.number_input("Cant.", min_value=1, value=item['cantidad'], key=f"q_{item['id']}")
                     if nueva_q != item['cantidad']:
                         st.session_state.carrito[i]['cantidad'] = nueva_q
@@ -97,13 +98,14 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
                     sub_f = f"${item['subtotal']:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
                     st.markdown(f"<p class='precio-grande'>{sub_f}</p>", unsafe_allow_html=True)
                 with c4:
-                    # Botón de eliminar con "key" única basada en el ID del item
                     if st.button("🗑️", key=f"del_{item['id']}"):
-                        st.session_state.carrito.pop(i)
-                        st.rerun()
+                        indice_a_borrar = i
             
-            st.divider()
-            if st.button("❌ Vaciar Todo"):
+            if indice_a_borrar is not None:
+                st.session_state.carrito.pop(indice_a_borrar)
+                st.rerun()
+
+            if st.button("❌ Vaciar Carrito"):
                 st.session_state.carrito = []
                 st.rerun()
         else:
@@ -112,31 +114,31 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
     with col_der:
         st.subheader("💰 Resumen y Pago")
         if st.session_state.carrito:
-            suma_productos = sum(item['subtotal'] for item in st.session_state.carrito)
+            suma_base = sum(item['subtotal'] for item in st.session_state.carrito)
             
-            c_desc, c_rec = st.columns(2)
-            with c_desc:
-                p_desc = st.number_input("Descuento %", min_value=0.0, value=0.0)
-            with c_rec:
-                p_rec = st.number_input("Recargo %", min_value=0.0, value=0.0)
+            c1, c2 = st.columns(2)
+            with c1: p_desc = st.number_input("Desc %", min_value=0.0, value=0.0)
+            with c2: p_rec = st.number_input("Rec %", min_value=0.0, value=0.0)
             
-            total_final = suma_productos * (1 - p_desc/100 + p_rec/100)
-            total_f = f"${total_final:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-            
+            total = suma_base * (1 - p_desc/100 + p_rec/100)
+            total_f = f"${total:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
             st.markdown(f"## TOTAL: {total_f}")
             
             metodo = st.selectbox("Pago:", ["Efectivo", "Débito", "Crédito", "Transferencia", "Fiado"])
+            detalles = st.text_input("Cuenta:") if metodo == "Transferencia" else ""
             cliente = st.text_input("Nombre Cliente:") if metodo == "Fiado" else "Consumidor Final"
 
             if st.button("✅ CONFIRMAR VENTA", type="primary", use_container_width=True):
-                venta_data = {
+                venta = {
                     "vendedor": nombre_u,
-                    "total": total_final,
+                    "total": total,
                     "metodo": metodo,
+                    "detalles_pago": detalles,
+                    "cliente": cliente,
                     "items": st.session_state.carrito,
                     "fecha": ahora_ar.isoformat()
                 }
-                db.collection("ventas_procesadas").add(venta_data)
+                db.collection("ventas_procesadas").add(venta)
                 st.session_state.carrito = []
                 st.success("¡Venta guardada!")
                 st.rerun()
