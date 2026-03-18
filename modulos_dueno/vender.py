@@ -9,27 +9,17 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
     
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
-        
-        # Leemos: Fila 2 como cabecera (skiprows=1) y columnas A y C (0 y 2)
         df_raw = conn.read(spreadsheet=url_sheet, ttl=60, skiprows=1, usecols=[0, 2])
         
         df_p = df_raw.copy()
         df_p.columns = ["PRODUCTOS", "PRECIO"]
         df_p = df_p.dropna(subset=["PRODUCTOS"])
 
-        # --- LIMPIEZA PROFUNDA DE PRECIOS ---
         def limpiar_precio(valor):
             if pd.isna(valor): return 0.0
-            s = str(valor).strip()
-            # 1. Quitamos el símbolo $ si lo tiene
-            s = s.replace('$', '')
-            # 2. Quitamos la coma (separador de miles americano)
-            s = s.replace(',', '')
-            # 3. Ahora que queda "1582.00", lo pasamos a número
-            try:
-                return float(s)
-            except:
-                return 0.0
+            s = str(valor).strip().replace('$', '').replace(',', '')
+            try: return float(s)
+            except: return 0.0
 
         df_p['PRECIO'] = df_p['PRECIO'].apply(limpiar_precio)
         
@@ -37,8 +27,7 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
         st.error(f"❌ Error al leer Excel: {e}")
         return
 
-    # --- INTERFAZ DE VENTA ---
-    col_izq, col_der = st.columns([1.5, 1])
+    col_izq, col_der = st.columns([1.3, 1])
 
     if 'carrito' not in st.session_state:
         st.session_state.carrito = []
@@ -49,10 +38,7 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
         seleccion = st.selectbox("Elegí un producto:", [""] + lista_nombres)
         
         if seleccion:
-            # Buscamos el precio convertido
             precio_u = df_p[df_p['PRODUCTOS'] == seleccion]['PRECIO'].values[0]
-            
-            # Mostramos en pantalla con formato humano (Argentina)
             precio_mostrar = f"${precio_u:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
             st.markdown(f"### Precio: **{precio_mostrar}**")
             
@@ -71,32 +57,67 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
         st.subheader("🧾 Ticket")
         if st.session_state.carrito:
             df_c = pd.DataFrame(st.session_state.carrito)
-            # Mostramos la tabla del carrito
             st.table(df_c[['nombre', 'cantidad', 'subtotal']])
             
-            total_final = df_c['subtotal'].sum()
+            suma_productos = df_c['subtotal'].sum()
+            
+            st.divider()
+            # --- SECCIÓN DE DESCUENTOS / RECARGOS ---
+            st.write("### Ajustes")
+            tipo_ajuste = st.radio("Aplicar:", ["Ninguno", "Descuento (%)", "Recargo (%)"], horizontal=True)
+            porcentaje = 0.0
+            if tipo_ajuste != "Ninguno":
+                porcentaje = st.number_input(f"Porcentaje de {tipo_ajuste.lower()}:", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
+            
+            # Cálculo del ajuste
+            monto_ajuste = (suma_productos * (porcentaje / 100))
+            if tipo_ajuste == "Descuento (%)":
+                total_final = suma_productos - monto_ajuste
+                st.write(f"📉 Descuento aplicado: -${monto_ajuste:,.2f}")
+            elif tipo_ajuste == "Recargo (%)":
+                total_final = suma_productos + monto_ajuste
+                st.write(f"📈 Recargo aplicado: +${monto_ajuste:,.2f}")
+            else:
+                total_final = suma_productos
+
             total_mostrar = f"${total_final:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
             st.markdown(f"## TOTAL: {total_mostrar}")
             
-            metodo = st.selectbox("Pago:", ["Efectivo", "Transferencia", "Fiado"])
-            cliente = st.text_input("Nombre/DNI Cliente:") if metodo == "Fiado" else "Consumidor Final"
+            # --- MEDIOS DE PAGO ACTUALIZADOS ---
+            metodo = st.selectbox("Medio de Pago:", ["Efectivo", "Débito", "Crédito", "Transferencia", "Fiado"])
+            
+            detalles_pago = ""
+            if metodo == "Transferencia":
+                detalles_pago = st.text_input("Nombre de la cuenta / Banco destino:", placeholder="Ej: Mercado Pago - Mi Kiosco")
+            
+            cliente = "Consumidor Final"
+            if metodo == "Fiado":
+                cliente = st.text_input("Nombre/DNI del Cliente:", placeholder="Ej: Juan Perez")
 
             if st.button("🚀 FINALIZAR VENTA", type="primary", use_container_width=True):
-                venta_data = {
-                    "id_negocio": id_negocio,
-                    "vendedor": nombre_u,
-                    "total": total_final,
-                    "metodo": metodo,
-                    "cliente_nombre": cliente,
-                    "items": st.session_state.carrito,
-                    "fecha_str": ahora_ar.strftime("%d/%m/%Y"),
-                    "hora_str": ahora_ar.strftime("%H:%M"),
-                    "fecha_completa": ahora_ar.isoformat()
-                }
-                db.collection("ventas_procesadas").add(venta_data)
-                st.session_state.carrito = []
-                st.success("✅ Venta Guardada")
-                st.rerun()
+                if metodo == "Fiado" and not cliente:
+                    st.warning("⚠️ El nombre del cliente es obligatorio para ventas al fiado.")
+                else:
+                    venta_data = {
+                        "id_negocio": id_negocio,
+                        "vendedor": nombre_u,
+                        "subtotal_base": suma_productos,
+                        "ajuste_tipo": tipo_ajuste,
+                        "ajuste_porcentaje": porcentaje,
+                        "total": total_final,
+                        "metodo": metodo,
+                        "detalles_pago": detalles_pago,
+                        "cliente_nombre": cliente,
+                        "items": st.session_state.carrito,
+                        "fecha_str": ahora_ar.strftime("%d/%m/%Y"),
+                        "hora_str": ahora_ar.strftime("%H:%M"),
+                        "fecha_completa": ahora_ar.isoformat()
+                    }
+                    db.collection("ventas_procesadas").add(venta_data)
+                    st.session_state.carrito = []
+                    st.success("✅ Venta Guardada")
+                    st.balloons()
+                    st.rerun()
             
             if st.button("🗑️ Vaciar Carrito"):
                 st.session_state.carrito = []
