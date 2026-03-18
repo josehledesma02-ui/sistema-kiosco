@@ -3,10 +3,9 @@ from datetime import datetime
 
 def mostrar(db):
     st.subheader("🛠️ Panel de Control de Soporte Técnico")
-    st.write("Gestioná los reportes enviados por los negocios y revisá las capturas de error.")
-
+    
     try:
-        # Traemos los reportes ordenados por fecha (más recientes primero)
+        # Traemos todos los reportes
         reportes_ref = db.collection("reportes_error").order_by("fecha", direction="DESCENDING").stream()
         
         hay_reportes = False
@@ -15,7 +14,7 @@ def mostrar(db):
             rep = doc.to_dict()
             id_doc = doc.id
             
-            # --- PROCESAMIENTO DE FECHA ---
+            # 1. PROCESAMIENTO DE FECHA (Igual al anterior)
             fecha_valor = rep.get("fecha")
             fecha_str = "S/F"
             if fecha_valor:
@@ -28,50 +27,53 @@ def mostrar(db):
                 elif hasattr(fecha_valor, 'strftime'):
                     fecha_str = fecha_valor.strftime("%d/%m %H:%M")
 
-            # --- COLOR SEGÚN PRIORIDAD ---
+            # 2. SEMÁFORO DE PRIORIDAD (Con respaldo si no existe el campo)
             prioridad = rep.get("prioridad", "Baja")
-            emoji_prio = "🟢"
-            if prioridad == "Urgente": emoji_prio = "🔴"
-            elif prioridad == "Alta": emoji_prio = "🟠"
-            elif prioridad == "Media": emoji_prio = "🟡"
+            # Mapeo manual por si el texto no coincide exacto
+            if "Urgente" in prioridad: emoji_prio = "🔴"
+            elif "Alta" in prioridad: emoji_prio = "🟠"
+            elif "Media" in prioridad: emoji_prio = "🟡"
+            else: emoji_prio = "🟢"
+
+            # 3. COMPATIBILIDAD DE FOTOS (Buscamos en todos los nombres posibles)
+            # Buscamos en 'links_fotos', 'fotos' o 'urls_fotos'
+            links = rep.get("links_fotos") or rep.get("fotos") or rep.get("urls_fotos") or []
 
             # --- DISEÑO DEL EXPANDER ---
-            titulo_expander = f"{emoji_prio} {rep.get('id_negocio', 'S/N').upper()} - {rep.get('tipo', 'Reporte')} ({fecha_str})"
+            titulo = f"{emoji_prio} {rep.get('id_negocio', 'S/N').upper()} - {rep.get('tipo', 'Reporte')} ({fecha_str})"
             
-            with st.expander(titulo_expander):
+            with st.expander(titulo):
                 st.write(f"**👤 Usuario:** {rep.get('usuario', 'Desconocido')}")
                 st.write(f"**🚨 Prioridad:** {prioridad}")
                 st.info(f"**💬 Mensaje:** {rep.get('mensaje', 'Sin detalle')}")
 
-                # --- SECCIÓN DE FOTOS (ImgBB) ---
-                links = rep.get("links_fotos", []) # Cambiamos a 'links_fotos' que es como lo guarda el nuevo reporte
-                if links:
+                # --- MOSTRAR IMÁGENES ---
+                if links and isinstance(links, list):
                     st.write("🖼️ **Capturas adjuntas:**")
-                    cols = st.columns(len(links) if len(links) < 4 else 4)
+                    # Usamos columnas para que no ocupen toda la pantalla hacia abajo
+                    cols = st.columns(min(len(links), 3)) 
                     for idx, link in enumerate(links):
-                        with cols[idx % 4]:
-                            st.image(link, use_container_width=True)
-                            st.markdown(f"[🔗 Ver pantalla completa]({link})")
+                        with cols[idx % 3]:
+                            st.image(link, caption=f"Captura {idx+1}", use_container_width=True)
+                            st.markdown(f"[🔍 Ver Original]({link})")
                 else:
-                    st.write("⚪ _Sin capturas adjuntas._")
+                    st.write("⚪ _Este reporte no incluye imágenes._")
 
                 st.divider()
                 
-                # --- ACCIONES ---
+                # --- BOTONES DE ACCIÓN ---
                 c1, c2 = st.columns(2)
                 with c1:
-                    if st.button("✅ Marcar como Resuelto", key=f"res_{id_doc}", use_container_width=True):
+                    if st.button("✅ Resolver", key=f"res_{id_doc}"):
                         db.collection("reportes_error").document(id_doc).update({"estado": "resuelto"})
-                        st.success("Reporte marcado como resuelto.")
                         st.rerun()
                 with c2:
-                    if st.button("🗑️ Eliminar Reporte", key=f"del_{id_doc}", use_container_width=True):
+                    if st.button("🗑️ Eliminar", key=f"del_{id_doc}"):
                         db.collection("reportes_error").document(id_doc).delete()
-                        st.warning("Reporte eliminado definitivamente.")
                         st.rerun()
 
         if not hay_reportes:
-            st.info("No hay reportes técnicos en la lista. ¡Todo funciona bien!")
+            st.info("No hay reportes pendientes.")
 
     except Exception as e:
-        st.error(f"Error al cargar el panel de soporte: {e}")
+        st.error(f"Error en el panel: {e}")
