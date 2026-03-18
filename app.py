@@ -83,7 +83,8 @@ if not st.session_state['autenticado']:
             if user_ref.exists and str(user_ref.to_dict().get('password')) == c_input:
                 d = user_ref.to_dict()
                 st.session_state.update({
-                    'autenticado': True, 'usuario': u_input, 'rol': d.get('rol'), 
+                    'autenticado': True, 'usuario': u_input, 
+                    'rol': d.get('rol').lower().strip(), # Normalizamos el rol
                     'id_negocio': d.get('id_negocio'), 'nombre_real': d.get('nombre'),
                     'id_usuario': u_input
                 })
@@ -91,7 +92,7 @@ if not st.session_state['autenticado']:
             else: st.error("❌ Usuario o Contraseña incorrectos")
 
 # ==========================================
-# 4. INTERFAZ PRINCIPAL
+# 4. INTERFAZ SEGÚN ROL
 # ==========================================
 else:
     negocio_id = st.session_state['id_negocio']
@@ -101,14 +102,15 @@ else:
     with st.sidebar:
         if os.path.exists(IMG_SIDEBAR): st.image(IMG_SIDEBAR, width=150)
         st.write(f"👤 **{vendedor_nom}**")
+        st.write(f"🔑 Rol: {rol_actual}")
         if st.button("🔴 Cerrar Sesión", use_container_width=True): 
             for key in list(st.session_state.keys()): del st.session_state[key]
             st.rerun()
 
     mostrar_titulo()
 
-    # SI ES DUEÑO: VE TODO EL PANEL
-    if rol_actual == "dueño":
+    # VISTA PARA EL DUEÑO
+    if "dueño" in rol_actual or "dueño" == rol_actual:
         tabs = st.tabs(["🛒 Ventas", "📉 Gastos", "📜 Historial", "👥 Clientes"])
 
         with tabs[0]: # VENTAS
@@ -183,7 +185,7 @@ else:
                 with st.expander(f"{hd.get('fecha_str', '')} | {hd.get('cliente', '')} | ${hd.get('total', 0):,.2f}"):
                     for i in hd.get('items', []): st.write(f"- {i['cantidad']}x {i['nombre']}")
 
-        with tabs[3]: # CLIENTES (VISTA DUEÑO - CORREGIDA)
+        with tabs[3]: # CLIENTES
             col_reg, col_list = st.columns([1, 2.5])
             with col_reg:
                 st.subheader("➕ Nuevo Cliente")
@@ -214,7 +216,6 @@ else:
                                 db.collection("pagos_clientes").add({"cliente_id": c.id, "monto": m_entega, "fecha": datetime.now(), "fecha_str": datetime.now().strftime("%d/%m/%Y"), "hora_str": datetime.now().strftime("%H:%M"), "id_negocio": negocio_id})
                                 st.rerun()
                         st.divider()
-                        # MOVIMIENTOS DETALLADOS
                         movs = []
                         for v in v_f:
                             vd = v.to_dict()
@@ -226,7 +227,7 @@ else:
                         for m in sorted(movs, key=lambda x: x['dt'], reverse=True):
                             st.write(m['t']); st.caption(m['s'])
 
-    # SI ES CLIENTE: VE SOLO SU CUENTA
+    # VISTA PARA EL CLIENTE
     elif rol_actual == "cliente":
         c_id = st.session_state['usuario']
         v_f = list(db.collection("ventas_procesadas").where("cliente_id", "==", c_id).where("metodo", "==", "Fiado").stream())
@@ -240,9 +241,9 @@ else:
         movs = []
         for v in v_f:
             vd = v.to_dict()
-            movs.append({"dt": vd.get('fecha_completa'), "t": f"🛒 Compra {vd['fecha_str']}", "m": f"- ${vd['total']}", "s": ", ".join([f"{i['cantidad']}x {i['nombre']}" for i in vd.get('items', [])]), "c": "red"})
+            movs.append({"dt": vd.get('fecha_completa'), "t": f"🛒 Compra {vd.get('fecha_str')}", "m": f"- ${vd.get('total')}", "s": ", ".join([f"{i['cantidad']}x {i['nombre']}" for i in vd.get('items', [])])})
         for p in p_f:
             pd = p.to_dict()
-            movs.append({"dt": pd.get('fecha'), "t": f"✅ Pago {pd['fecha_str']}", "m": f"+ ${pd['monto']}", "s": "Entrega de efectivo", "c": "green"})
+            movs.append({"dt": pd.get('fecha'), "t": f"✅ Pago {pd.get('fecha_str')}", "m": f"+ ${pd.get('monto')}", "s": "Entrega de dinero"})
         for m in sorted(movs, key=lambda x: x['dt'], reverse=True):
             st.write(f"**{m['t']}** | {m['s']} | **{m['m']}**")
