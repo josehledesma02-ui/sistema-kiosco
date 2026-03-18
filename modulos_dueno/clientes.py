@@ -16,100 +16,115 @@ def renderizar(db, id_negocio):
             }
             .cliente-card {
                 background-color: #ffffff;
-                padding: 15px;
-                border-radius: 10px;
-                border-left: 5px solid #1E88E5;
-                box-shadow: 0px 2px 4px rgba(0,0,0,0.05);
-                margin-bottom: 10px;
+                padding: 20px;
+                border-radius: 12px;
+                border-left: 6px solid #1E88E5;
+                box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+                margin-bottom: 15px;
             }
-            /* Estilo para la papelera roja (igual que en ventas) */
-            .stButton > button[key^="del_cli_"] {
-                border: none !important;
-                background: transparent !important;
-                color: #FF1744 !important;
-                font-size: 22px !important;
-                font-weight: bold !important;
-                padding: 0 !important;
-                margin-top: 10px;
+            .deuda-total {
+                font-size: 24px;
+                font-weight: bold;
+                color: #D32F2F;
             }
         </style>
     """, unsafe_allow_html=True)
 
-    st.header("👥 Gestión de Clientes")
+    st.header("👥 Gestión de Clientes y Cuentas")
 
-    # Organizamos en dos pestañas para que sea cómodo
     tab_lista, tab_nuevo = st.tabs(["📋 Lista de Clientes", "➕ Agregar Nuevo"])
 
-    # --- PESTAÑA 1: VER Y ELIMINAR CLIENTES ---
+    # --- PESTAÑA 1: LISTA Y DETALLE DE CUENTA CORRIENTE ---
     with tab_lista:
-        st.markdown('<div class="sub-blue">Clientes en Base de Datos</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sub-blue">Clientes Registrados</div>', unsafe_allow_html=True)
         
         try:
-            # Traemos los clientes filtrados por el ID de tu negocio
             clientes_ref = db.collection("clientes").where("id_negocio", "==", id_negocio).stream()
             lista_clientes = []
             for doc in clientes_ref:
                 datos = doc.to_dict()
-                datos["id_doc"] = doc.id # Guardamos el ID interno de Firebase
+                datos["id_doc"] = doc.id
                 lista_clientes.append(datos)
 
             if lista_clientes:
-                # Ordenar alfabéticamente por nombre
                 lista_clientes = sorted(lista_clientes, key=lambda x: x.get('nombre', '').lower())
                 
                 for cli in lista_clientes:
-                    with st.container():
-                        # Columnas para Nombre, Teléfono y el botón de borrar
-                        c1, c2, c3 = st.columns([3, 2, 0.5])
-                        with c1:
-                            st.markdown(f"**{cli['nombre']}**")
-                            if cli.get('nota'): 
-                                st.caption(f"📝 {cli['nota']}")
-                        with c2:
-                            tel = cli.get('telefono', 'Sin teléfono')
-                            st.write(f"📞 {tel if tel else 'Sin teléfono'}")
-                        with c3:
-                            # La misma papelera roja que usamos en ventas
-                            if st.button("🗑️", key=f"del_cli_{cli['id_doc']}"):
-                                db.collection("clientes").document(cli['id_doc']).delete()
-                                st.success(f"Cliente '{cli['nombre']}' eliminado.")
-                                st.rerun()
-                        st.divider()
-            else:
-                st.info("No hay clientes registrados todavía. Podés cargar el primero en la pestaña 'Agregar Nuevo'.")
-        
-        except Exception as e:
-            st.error(f"Error al conectar con la base de datos de clientes: {e}")
+                    # Usamos un expander para que no ocupe espacio y solo se vea el detalle al clickear
+                    with st.expander(f"👤 {cli['nombre']} - Ver Detalle"):
+                        st.markdown(f"### Detalle de: {cli['nombre']}")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write(f"🆔 **DNI (Contraseña):** {cli.get('dni', 'No cargado')}")
+                            st.write(f"📞 **WhatsApp:** {cli.get('telefono', 'Sin asignar')}")
+                        with col2:
+                            # Aquí consultamos la deuda en tiempo real (Sumamos las ventas con método "Fiado" de este cliente)
+                            ventas_fiado = db.collection("ventas_procesadas")\
+                                .where("id_negocio", "==", id_negocio)\
+                                .where("cliente_nombre", "==", cli['nombre'])\
+                                .where("metodo", "==", "Fiado").stream()
+                            
+                            total_deuda = sum(v.to_dict().get('total', 0) for v in ventas_fiado)
+                            total_f = f"${total_deuda:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+                            
+                            st.markdown(f"💰 **Deuda Total:**")
+                            st.markdown(f"<p class='deuda-total'>{total_f}</p>", unsafe_allow_html=True)
 
-    # --- PESTAÑA 2: CARGAR CLIENTE NUEVO ---
+                        st.info(f"📝 **Referencia:** {cli.get('nota', 'Sin notas adicionales')}")
+                        
+                        # Botón para borrar cliente (Solo si no tiene deuda, o advertir)
+                        if st.button("🗑️ Eliminar Cliente", key=f"del_cli_{cli['id_doc']}"):
+                            db.collection("clientes").document(cli['id_doc']).delete()
+                            # También podrías borrar su usuario de la tabla usuarios si lo deseas
+                            st.success(f"Cliente '{cli['nombre']}' eliminado del sistema.")
+                            st.rerun()
+            else:
+                st.info("No hay clientes registrados.")
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+    # --- PESTAÑA 2: AGREGAR CLIENTE Y CREAR USUARIO AUTOMÁTICO ---
     with tab_nuevo:
-        st.markdown('<div class="sub-blue">Registrar Nuevo Cliente</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sub-blue">Registrar Nuevo Cliente y Crear Acceso</div>', unsafe_allow_html=True)
         
-        # Usamos un formulario para que se limpie al terminar
         with st.form("form_alta_cliente", clear_on_submit=True):
-            nombre_nuevo = st.text_input("Nombre Completo (Obligatorio):").strip()
-            tel_nuevo = st.text_input("Teléfono / WhatsApp (Opcional):")
-            nota_nueva = st.text_area("Notas o referencias:", placeholder="Ej: Vive al lado de lo de Doña Rosa, pariente de Juan, etc.")
+            nombre_nuevo = st.text_input("Nombre y Apellido (Será su Usuario):").strip()
+            dni_nuevo = st.text_input("DNI (Será su Contraseña):").strip()
+            tel_nuevo = st.text_input("WhatsApp / Teléfono:")
+            nota_nueva = st.text_area("Notas o referencias:")
             
-            btn_guardar = st.form_submit_button("💾 GUARDAR CLIENTE EN LISTA", use_container_width=True)
+            st.caption("⚠️ Al guardar, el cliente podrá entrar con su Nombre y DNI a ver su cuenta.")
+            btn_guardar = st.form_submit_button("💾 GUARDAR Y CREAR USUARIO", use_container_width=True)
             
             if btn_guardar:
-                if not nombre_nuevo:
-                    st.warning("⚠️ El nombre es necesario para poder elegirlo después en Ventas.")
-                elif nombre_nuevo.lower() == "consumidor final":
-                    st.error("❌ 'Consumidor Final' ya existe por defecto, elegí otro nombre.")
+                if not nombre_nuevo or not dni_nuevo:
+                    st.warning("⚠️ El Nombre y el DNI son obligatorios para crear el acceso.")
                 else:
                     try:
-                        # Estructura del dato para Firebase
-                        nuevo_registro = {
+                        # 1. Creamos el perfil del Cliente
+                        nuevo_cliente = {
                             "id_negocio": id_negocio,
                             "nombre": nombre_nuevo,
+                            "dni": dni_nuevo,
                             "telefono": tel_nuevo,
                             "nota": nota_nueva,
                             "fecha_alta": datetime.now().isoformat()
                         }
-                        db.collection("clientes").add(nuevo_registro)
-                        st.success(f"✅ ¡{nombre_nuevo} se agregó correctamente!")
-                        # No hace falta rerun porque el form se limpia solo
+                        db.collection("clientes").add(nuevo_cliente)
+                        
+                        # 2. Creamos el Usuario para que pueda iniciar sesión
+                        # Importante: El 'rol' debe ser 'cliente'
+                        nuevo_usuario = {
+                            "id_negocio": id_negocio,
+                            "nombre_real": nombre_nuevo,
+                            "usuario": nombre_nuevo, 
+                            "clave": dni_nuevo,
+                            "rol": "cliente",
+                            "fecha_creacion": datetime.now().isoformat()
+                        }
+                        db.collection("usuarios").add(nuevo_usuario)
+                        
+                        st.success(f"✅ ¡{nombre_nuevo} registrado! Usuario y contraseña creados.")
                     except Exception as e:
                         st.error(f"No se pudo guardar: {e}")
