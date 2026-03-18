@@ -70,10 +70,10 @@ def mostrar(db):
                         st.chat_message("assistant").write(f"**Análisis de JL-IA:** José, analizando el reporte de {rep.get('id_negocio')}, el problema de '{rep.get('tipo')}' suele deberse a un conflicto en la base de datos. Te sugiero revisar el campo 'stock' en Firebase.")
                         st.caption("Nota: Para que esto sea automático, conectaremos tu API Key en el próximo paso.")
                 c1, c2 = st.columns(2)
+                
+                st.divider()
+                
                 with c1:
-                    
-                    st.divider()
-                    
                     if st.button("✅ Resolver y Archivar", key=f"res_{id_doc}_{i}", use_container_width=True):
                         db.collection("reportes_error").document(id_doc).update({
                             "estado": "resuelto",
