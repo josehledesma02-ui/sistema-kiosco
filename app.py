@@ -146,8 +146,10 @@ else:
         )
 
     elif rol == "super_admin":
-        st.title("⚡ Panel Maestro (Super Admin)")
-        st.write("Gestionando todos los negocios activos...")
+        # Importamos el archivo de la vista
+        import vistas_super_admin
+        # Llamamos a la función pasándole la base de datos y la hora
+        vistas_super_admin.mostrar_super_admin(db, ahora)
 
     elif rol == "empleado":
         import vistas_empleado
