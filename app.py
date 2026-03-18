@@ -139,18 +139,16 @@ else:
         for m in movs:
             with st.container(border=True):
                 d = m['d']
-                c1, c2 = st.columns([3, 1])
                 if m['tipo'] == "C":
-                    with c1:
-                        st.markdown(f"### 🛒 Compra: {d.get('fecha_str')} - {d.get('hora_str')}hs")
-                        for i in d.get('items', []):
-                            st.markdown(f"📍 **{i['cantidad']}** x {i['nombre']} (${i['subtotal']:,.2f})")
-                    with c2: st.markdown(f"<h2 style='color:red;'>- ${d.get('total', 0):,.2f}</h2>", unsafe_allow_html=True)
+                    st.markdown(f"### 🛒 Compra: {d.get('fecha_str')} - {d.get('hora_str')}hs")
+                    for i in d.get('items', []):
+                        st.write(f"📍 **{i['cantidad']}** x {i['nombre']} (${i['subtotal']:,.2f})")
+                    st.markdown(f"<h2 style='color:red;'>- ${d.get('total', 0):,.2f}</h2>", unsafe_allow_html=True)
                 else:
-                    with c1: st.markdown(f"### ✅ Pago Recibido: {d.get('fecha_str')} - {d.get('hora_str')}hs")
-                    with c2: st.markdown(f"<h2 style='color:green;'>+ ${d.get('monto', 0):,.2f}</h2>", unsafe_allow_html=True)
+                    st.markdown(f"### ✅ Pago Recibido: {d.get('fecha_str')} - {d.get('hora_str')}hs")
+                    st.markdown(f"<h2 style='color:green;'>+ ${d.get('monto', 0):,.2f}</h2>", unsafe_allow_html=True)
 
-    # --- VISTA DUEÑO (CON PRODUCTOS Y PRECIO) ---
+    # --- VISTA DUEÑO (USANDO PRODUCTOS Y PRECIO) ---
     elif rol_u == "negocio":
         tabs = st.tabs(["🛒 Ventas", "📉 Gastos", "📜 Historial", "👥 Clientes"])
         
@@ -160,7 +158,7 @@ else:
             
             df = st.session_state.df_proveedor
             # A2 = Productos | C2 = Precio
-            prod_sel = st.selectbox("Seleccionar Productos", df['Productos'].unique())
+            prod_sel = st.selectbox("Seleccionar Producto", df['Productos'].unique())
             cant = st.number_input("Cantidad", min_value=0.1, value=1.0, step=0.1)
             
             if st.button("Agregar al Carrito"):
@@ -205,13 +203,13 @@ else:
                 st.success("Gasto registrado")
 
         with tabs[2]: # HISTORIAL
-            st.subheader("Ventas de hoy")
+            st.subheader("Ventas registradas")
             h_ventas = db.collection("ventas_procesadas").where("id_negocio", "==", neg_id).stream()
             lista_h = [{"Fecha": v.to_dict().get('fecha_str'), "Hora": v.to_dict().get('hora_str'), "Método": v.to_dict().get('metodo'), "Total": v.to_dict().get('total')} for v in h_ventas]
             if lista_h: st.table(pd.DataFrame(lista_h))
 
         with tabs[3]: # CLIENTES
-            st.subheader("Alta de Clientes")
+            st.subheader("Nuevo Cliente")
             nc_nom = st.text_input("Nombre y Apellido")
             nc_dni = st.text_input("DNI (Clave)")
             nc_f = st.text_input("Fecha de Pago (DD/MM/AAAA)")
