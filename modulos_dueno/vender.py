@@ -10,24 +10,26 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         
-        # AJUSTE CLAVE: 
-        # skiprows=1 le dice que empiece a leer desde la fila 2.
-        # usecols=[0, 2] le dice que solo tome la columna A (0) y la C (2).
+        # Leemos desde la fila 2 (skiprows=1) y columnas A y C (usecols=[0, 2])
         df_raw = conn.read(spreadsheet=url_sheet, ttl=60, skiprows=1, usecols=[0, 2])
         
-        # Renombramos para que el código sea fácil de leer
         df_p = df_raw.copy()
         df_p.columns = ["PRODUCTOS", "PRECIO"]
-        
-        # Limpieza: eliminamos filas vacías y limpiamos precios
         df_p = df_p.dropna(subset=["PRODUCTOS"])
-        df_p['PRECIO'] = df_p['PRECIO'].astype(str).replace(r'[\$,\.]', '', regex=True).astype(float)
+
+        # --- CORRECCIÓN DE FORMATO AMERICANO (1,582.00 -> 1582.0) ---
+        # 1. Convertimos a string por seguridad
+        df_p['PRECIO'] = df_p['PRECIO'].astype(str)
+        # 2. Quitamos la coma de los miles
+        df_p['PRECIO'] = df_p['PRECIO'].str.replace(',', '', regex=False)
+        # 3. Lo convertimos a número (el punto decimal lo entiende Python nativamente)
+        df_p['PRECIO'] = pd.to_numeric(df_p['PRECIO'], errors='coerce').fillna(0)
         
     except Exception as e:
-        st.error(f"❌ Error al leer Excel (Fila A2/C2): {e}")
+        st.error(f"❌ Error al leer Excel: {e}")
         return
 
-    # --- INTERFAZ DE VENTA ---
+    # --- RESTO DEL CÓDIGO DE INTERFAZ (IGUAL AL ANTERIOR) ---
     col_izq, col_der = st.columns([1.5, 1])
 
     if 'carrito' not in st.session_state:
@@ -40,7 +42,8 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
         
         if seleccion:
             precio_u = df_p[df_p['PRODUCTOS'] == seleccion]['PRECIO'].values[0]
-            st.markdown(f"### Precio: **${precio_u:,.2f}**")
+            # Mostramos con formato local: $1.582,00
+            st.markdown(f"### Precio: **${precio_u:,.2f}**".replace(",", "v").replace(".", ",").replace("v", "."))
             
             cant = st.number_input("Cantidad:", min_value=1, value=1, step=1)
             
@@ -60,7 +63,9 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
             st.table(df_c[['nombre', 'cantidad', 'subtotal']])
             
             total_final = df_c['subtotal'].sum()
-            st.markdown(f"## TOTAL: ${total_final:,.2f}")
+            # Formato de moneda para Argentina en el Total
+            total_ar = f"${total_final:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+            st.markdown(f"## TOTAL: {total_ar}")
             
             metodo = st.selectbox("Pago:", ["Efectivo", "Transferencia", "Fiado"])
             cliente = st.text_input("Nombre/DNI Cliente:") if metodo == "Fiado" else "Consumidor Final"
