@@ -25,7 +25,7 @@ def mostrar_super_admin(db, ahora):
     
     # Este es el selector que ahora se verá oscuro gracias al CSS en app.py
     choice = st.sidebar.selectbox("Panel de Control", menu)
-    
+    # Lógica de navegación del Super Admin
     if choice == "📊 Dashboard Global":
         dashboard.mostrar(db)
         
