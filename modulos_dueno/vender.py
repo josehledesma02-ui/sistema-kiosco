@@ -61,8 +61,7 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
         st.error(f"❌ Error al conectar con Excel: {e}")
         return
 
-    # --- CARGAR LISTA DE CLIENTES DESDE FIREBASE ---
-    # Por defecto siempre está "Consumidor Final" primero
+    # --- CARGAR LISTA DE CLIENTES ---
     lista_clientes = ["Consumidor Final"]
     try:
         docs_clientes = db.collection("clientes").where("id_negocio", "==", id_negocio).stream()
@@ -72,7 +71,7 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
             if nombre_cli and nombre_cli not in lista_clientes:
                 lista_clientes.append(nombre_cli)
     except:
-        pass # Si falla o no hay clientes, queda solo "Consumidor Final"
+        pass
 
     col_izq, col_der = st.columns([1.3, 1])
 
@@ -138,26 +137,33 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
         if st.session_state.carrito:
             suma_base = sum(item['subtotal'] for item in st.session_state.carrito)
             
-            # --- LISTA DESPLEGABLE DE CLIENTES (NUEVA UBICACIÓN) ---
             cliente_seleccionado = st.selectbox("👤 Seleccionar Cliente:", lista_clientes, index=0)
             
             c1, c2 = st.columns(2)
             with c1: p_desc = st.number_input("Descuento %", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
             with c2: p_rec = st.number_input("Recargo %", min_value=0.0, max_value=100.0, value=0.0, step=0.5)
             
-            total_final = suma_base * (1 - p_desc/100 + p_rec/100)
+            # --- CÁLCULO DE AJUSTES EN PESOS ---
+            m_desc = (suma_base * p_desc / 100)
+            m_rec = (suma_base * p_rec / 100)
+            total_final = suma_base - m_desc + m_rec
+            
             total_f = f"${total_final:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
             st.markdown(f"<p class='total-font'>TOTAL: {total_f}</p>", unsafe_allow_html=True)
             
+            # --- DETALLE DE AJUSTES (PESOS) ---
+            if m_desc > 0:
+                m_desc_f = f"${m_desc:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+                st.markdown(f"📉 *Descuento aplicado: -{m_desc_f}*")
+            if m_rec > 0:
+                m_rec_f = f"${m_rec:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+                st.markdown(f"📈 *Recargo aplicado: +{m_rec_f}*")
+            
             st.divider()
             metodo = st.selectbox("Medio de Pago:", ["Efectivo", "Débito", "Crédito", "Transferencia", "Fiado"])
-            
-            detalles_pago = ""
-            if metodo == "Transferencia":
-                detalles_pago = st.text_input("Cuenta / Detalles:")
+            detalles_pago = st.text_input("Cuenta / Detalles:") if metodo == "Transferencia" else ""
 
             if st.button("🚀 CONFIRMAR VENTA", type="primary", use_container_width=True):
-                # Validación para Fiado: no puede ser Consumidor Final
                 if metodo == "Fiado" and cliente_seleccionado == "Consumidor Final":
                     st.warning("⚠️ Para ventas al FIADO debes seleccionar un cliente de la lista.")
                 else:
