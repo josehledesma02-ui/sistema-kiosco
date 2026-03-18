@@ -36,11 +36,18 @@ st.markdown("""
             background-image: linear-gradient(#2e3b4e, #1c2531);
         }
 
-        /* Forzar texto blanco en todo el sidebar */
-        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p, 
-        [data-testid="stSidebar"] span, 
-        [data-testid="stSidebar"] label,
-        [data-testid="stSidebar"] caption {
+        /* FORZAR TODO EL TEXTO DEL SIDEBAR A BLANCO (Reloj, Negocio, Rol) */
+        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] span,
+        [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p,
+        [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+        [data-testid="stSidebar"] .stText p {
+            color: white !important;
+            opacity: 1 !important;
+        }
+
+        /* Estilo específico para el ID de Negocio y el Reloj */
+        [data-testid="stSidebar"] .stCaption {
             color: white !important;
         }
 
@@ -56,13 +63,13 @@ st.markdown("""
             fill: white !important;
         }
 
-        /* Título del selector */
-        div[data-testid="stSidebar"] .stSelectbox label {
+        /* Título del selector (Panel de Control) */
+        div[data-testid="stSidebar"] .stSelectbox label p {
             color: #4dabf7 !important;
-            font-weight: bold;
+            font-weight: bold !important;
         }
 
-        /* Lista desplegable */
+        /* Lista desplegable del menú */
         div[data-baseweb="popover"] ul {
             background-color: #1c2531 !important;
             color: white !important;
@@ -168,6 +175,7 @@ else:
             st.rerun()
         
         st.markdown("---")
+        # El reloj ahora debería ser blanco brillante
         st.caption(f"🕒 {ahora.strftime('%d/%m/%Y %H:%M')}")
 
     # --- REPARTIDOR DE VISTAS SEGÚN ROL ---
