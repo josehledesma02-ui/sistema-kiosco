@@ -4,3 +4,4 @@ pandas
 pytz
 plotly
 st-gsheets-connection
+streamlit-antd-components
