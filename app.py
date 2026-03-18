@@ -6,7 +6,7 @@ from datetime import datetime
 import os
 
 # ==========================================
-# 0. CONFIGURACIÓN VISUAL (ESTRICTA)
+# 0. CONFIGURACIÓN VISUAL
 # ==========================================
 st.set_page_config(page_title="JL Gestión Pro", page_icon="🛍️", layout="wide")
 
@@ -107,10 +107,10 @@ else:
     mostrar_titulo()
     tabs = st.tabs(["🛒 Ventas", "📉 Gastos", "📜 Historial", "👥 Clientes"])
 
-    with tabs[0]: # PESTAÑA VENTAS (VUELVE TU DISEÑO ORIGINAL)
+    with tabs[0]: # PESTAÑA VENTAS (CON PORCENTAJES)
         col_izq, col_der = st.columns([1.6, 1])
         with col_izq:
-            busqueda = st.text_input("🔍 Buscar producto...", placeholder="Ej: Fideo...")
+            busqueda = st.text_input("🔍 Buscar producto...", placeholder="Ej: Aceite...")
             if busqueda and st.session_state.df_proveedor is not None:
                 res = st.session_state.df_proveedor[st.session_state.df_proveedor['Productos'].str.contains(busqueda, case=False, na=False)]
                 for _, fila in res.head(8).iterrows():
@@ -145,23 +145,40 @@ else:
             for c in c_docs:
                 cd = c.to_dict(); dict_clientes[cd.get('nombre', 'Sin Nombre')] = c.id
             cliente_sel = st.selectbox("Cliente", list(dict_clientes.keys()))
-            metodo = st.selectbox("Método de Pago", ["Efectivo", "Transferencia", "Fiado"])
+            
+            metodo = st.selectbox("Método de Pago", ["Efectivo", "Transferencia", "Débito", "Crédito", "Fiado"])
+            
+            info_pago = ""
+            if metodo == "Transferencia":
+                info_pago = st.text_input("Cuenta") 
             
             st.divider()
             sub_t = sum(it['subtotal'] for it in st.session_state.carrito)
-            st.markdown(f"<div style='background:#f0f2f6;padding:20px;border-radius:10px;text-align:center;border:2px solid #1E88E5'><p style='margin:0'>TOTAL A COBRAR</p><h1 style='color:#1E88E5;margin:0'>${sub_t:,.2f}</h1></div>", unsafe_allow_html=True)
+            
+            c_desc, c_rec = st.columns(2)
+            p_desc = c_desc.number_input("Descuento %", 0, 100, 0) # PORCENTAJE
+            p_rec = c_rec.number_input("Recargo %", 0, 100, 0)    # PORCENTAJE
+            
+            # CÁLCULO FINAL
+            monto_descuento = (sub_t * p_desc) / 100
+            monto_recargo = (sub_t * p_rec) / 100
+            total_f = sub_t - monto_descuento + monto_recargo
+
+            st.markdown(f"<div style='background:#f0f2f6;padding:20px;border-radius:10px;text-align:center;border:2px solid #1E88E5'><p style='margin:0'>TOTAL CON DESC/REC</p><h1 style='color:#1E88E5;margin:0'>${total_f:,.2f}</h1><small>Subtotal: ${sub_t:,.2f}</small></div>", unsafe_allow_html=True)
             
             if st.button("🚀 REGISTRAR VENTA", use_container_width=True, type="primary"):
                 if st.session_state.carrito:
                     ahora = datetime.now()
                     db.collection("ventas_procesadas").add({
                         "vendedor": vendedor_nom, "id_negocio": negocio_id, "cliente": cliente_sel,
-                        "cliente_id": dict_clientes[cliente_sel], "items": st.session_state.carrito, "total": sub_t, 
-                        "metodo": metodo, "fecha_completa": ahora, "fecha_str": ahora.strftime("%d/%m/%Y"), "hora_str": ahora.strftime("%H:%M")
+                        "cliente_id": dict_clientes[cliente_sel], "items": st.session_state.carrito, 
+                        "total": total_f, "metodo": metodo, "info_pago": info_pago,
+                        "p_descuento": p_desc, "p_recargo": p_rec,
+                        "fecha_completa": ahora, "fecha_str": ahora.strftime("%d/%m/%Y"), "hora_str": ahora.strftime("%H:%M")
                     })
                     st.session_state.carrito = []; st.success("Venta Exitosa"); st.rerun()
 
-    with tabs[3]: # PESTAÑA CLIENTES (ORDENADA Y CON BOTÓN DE PAGO)
+    with tabs[3]: # PESTAÑA CLIENTES (CONSERVADA)
         col_reg, col_list = st.columns([1, 2])
         with col_reg:
             st.subheader("➕ Nuevo Cliente")
@@ -169,7 +186,7 @@ else:
                 nom_c = st.text_input("Nombre y Apellido")
                 dni_c = st.text_input("DNI (Su contraseña)")
                 tel_c = st.text_input("WhatsApp")
-                f_pago = st.text_input("Acuerdo de pago (Ej: 05 de cada mes)")
+                f_pago = st.text_input("Acuerdo de pago (Ej: Los 05)")
                 if st.form_submit_button("Guardar Cliente"):
                     if nom_c and dni_c:
                         u_id = f"{nom_c.lower().replace(' ', '')}_{negocio_id}"
@@ -182,25 +199,23 @@ else:
         
         with col_list:
             st.subheader("👥 Estado de Deudas")
-            clientes_q = db.collection("usuarios").where("id_negocio", "==", negocio_id).where("rol", "==", "cliente").stream()
-            for c in clientes_q:
+            clis = db.collection("usuarios").where("id_negocio", "==", negocio_id).where("rol", "==", "cliente").stream()
+            for c in clis:
                 cd = c.to_dict()
-                # Buscamos ventas fiadas para este cliente específico
-                v_fiadas = db.collection("ventas_procesadas").where("cliente_id", "==", c.id).where("metodo", "==", "Fiado").stream()
-                lista_fiadas = [v for v in v_fiadas]
-                deuda_total = sum(v.to_dict().get('total', 0) for v in lista_fiadas)
+                v_f = db.collection("ventas_procesadas").where("cliente_id", "==", c.id).where("metodo", "==", "Fiado").stream()
+                lista_v = [v for v in v_f]
+                deuda = sum(v.to_dict().get('total', 0) for v in lista_v)
                 
-                with st.expander(f"👤 {cd.get('nombre')} | 💰 Deuda: ${deuda_total:,.2f}"):
-                    st.write(f"**DNI:** {cd.get('dni') or cd.get('DNI') or '---'}")
-                    st.write(f"**WhatsApp:** {cd.get('tel', '-')}")
-                    st.write(f"**Paga:** {cd.get('fecha_acuerdo_pago', '-')}")
-                    if deuda_total > 0:
-                        if st.button(f"✅ Liquidar Deuda (${deuda_total:,.2f})", key=f"pay_{c.id}"):
-                            for v in lista_fiadas:
+                with st.expander(f"👤 {cd.get('nombre')} | 💰 Deuda: ${deuda:,.2f}"):
+                    st.write(f"**DNI:** {cd.get('dni', '---')} | **WhatsApp:** {cd.get('tel', '-')}")
+                    st.write(f"**Acuerdo:** {cd.get('fecha_acuerdo_pago', '-')}")
+                    if deuda > 0:
+                        if st.button(f"✅ Liquidar Deuda (${deuda:,.2f})", key=f"p_{c.id}"):
+                            for v in lista_v:
                                 db.collection("ventas_procesadas").document(v.id).update({"metodo": "Pagado (Antes Fiado)"})
-                            st.success(f"Deuda de {cd.get('nombre')} saldada con éxito."); st.rerun()
+                            st.rerun()
 
-    with tabs[1]: # GASTOS (DISEÑO ORIGINAL)
+    with tabs[1]: # GASTOS
         st.subheader("Gastos")
         with st.form("g_form"):
             m = st.number_input("Monto", 0.0); d = st.text_input("Detalle")
@@ -208,7 +223,7 @@ else:
                 db.collection("gastos").add({"monto": m, "detalle": d, "id_negocio": negocio_id, "fecha": datetime.now()})
                 st.success("Gasto guardado")
 
-    with tabs[2]: # HISTORIAL (DISEÑO ORIGINAL)
+    with tabs[2]: # HISTORIAL
         st.subheader("Historial")
         h_ref = db.collection("ventas_procesadas").where("id_negocio", "==", negocio_id).order_by("fecha_completa", direction=firestore.Query.DESCENDING).limit(10).stream()
         for h in h_ref:
