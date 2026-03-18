@@ -9,10 +9,11 @@ import vistas_cliente
 # ==========================================
 # Estilos CSS
 st.markdown("""
-    /* ========================================== */
+    <style>
+        /* ========================================== */
         /* FIX: ELIMINAR FONDO BLANCO DEL SELECTBOX  */
         /* ========================================== */
-        /* Cambia el color del texto y el fondo del selector en el sidebar */
+        /* Fondo y texto del selector principal */
         div[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div {
             background-color: rgba(255, 255, 255, 0.05) !important;
             color: white !important;
@@ -20,39 +21,40 @@ st.markdown("""
             border-radius: 8px;
         }
 
-        /* Cambia el color de la flechita del selector */
+        /* Color de la flechita */
         div[data-testid="stSidebar"] .stSelectbox svg {
             fill: white !important;
         }
 
-        /* Cambia el color de la etiqueta "Panel de Control" que está arriba del selector */
+        /* Color del título "Panel de Control" */
         div[data-testid="stSidebar"] .stSelectbox label {
-            color: #007bff !important; /* Azul como las métricas para que resalte */
+            color: #007bff !important; 
             font-weight: bold;
         }
 
-        /* Estilo para las opciones cuando se despliega la lista */
+        /* Estilo de la lista cuando hacés clic (el desplegable) */
         div[data-baseweb="popover"] ul {
-            background-color: #1c2531 !important; /* Fondo oscuro igual al sidebar */
+            background-color: #1c2531 !important;
             color: white !important;
         }
 
         div[data-baseweb="popover"] li:hover {
-            background-color: #2e3b4e !important; /* Resalte al pasar el mouse */
+            background-color: #2e3b4e !important;
+            color: white !important;
         }
+
         /* ========================================== */
         /* FIX: BOTÓN CERRAR SESIÓN (Sin fondo blanco) */
         /* ========================================== */
-        /* Seleccionamos específicamente el botón dentro del sidebar */
         section[data-testid="stSidebar"] div.stButton > button {
-            background-color: rgba(255, 255, 255, 0.1) !important; /* Fondo traslúcido */
+            background-color: rgba(255, 255, 255, 0.1) !important;
             border: 1px solid rgba(255, 255, 255, 0.2) !important;
             color: white !important;
             width: 100%;
         }
 
         section[data-testid="stSidebar"] div.stButton > button:hover {
-            background-color: #ff4b4b !important; /* Rojo al pasar el mouse */
+            background-color: #ff4b4b !important;
             border: none !important;
             color: white !important;
             transform: scale(1.02);
