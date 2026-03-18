@@ -15,9 +15,9 @@ def obtener_hora_argentina():
     zona_ar = pytz.timezone('America/Argentina/Buenos_Aires')
     return datetime.now(zona_ar)
 
-# URL apuntando específicamente a "Hoja 1"
 ID_HOJA = "1-ay_xIqYItwOaXe80VUsEmh4gsANrk9PH72aZcUD54g"
 NOMBRE_HOJA = "Hoja 1"
+# URL corregida para leer la Hoja 1 directamente
 URL_PROVEEDOR_CSV = f"https://docs.google.com/spreadsheets/d/{ID_HOJA}/gviz/tq?tqx=out:csv&sheet={NOMBRE_HOJA.replace(' ', '%20')}"
 
 IMG_LOGIN = "logo.png" 
@@ -55,7 +55,7 @@ if 'autenticado' not in st.session_state:
     })
 
 # ==========================================
-# 3. LOGIN
+# 3. LOGIN (Diseño Original)
 # ==========================================
 if not st.session_state.autenticado:
     _, col_login, _ = st.columns([1, 1.5, 1])
@@ -95,10 +95,6 @@ else:
         st.markdown(f"### 👤 {nom_u}")
         st.write(f"🏷️ **Rol:** {rol_u.capitalize()}")
         st.write(f"🏢 **Negocio:** {neg_id.upper()}")
-        
-        if rol_u == "cliente":
-            st.write(f"📅 **Fecha de pago:** {f_pago}")
-        
         st.divider()
         if st.button("🔴 Cerrar Sesión", use_container_width=True): 
             for key in list(st.session_state.keys()): del st.session_state[key]
@@ -106,8 +102,95 @@ else:
 
     mostrar_titulo()
 
+    # --- VISTA DUEÑO ---
+    if rol_u == "negocio":
+        tabs = st.tabs(["🛒 Ventas", "📉 Gastos", "📜 Historial", "👥 Clientes"])
+        
+        with tabs[0]: # VENTAS
+            if st.session_state.df_proveedor is None:
+                # header=1 asume que los nombres 'Productos' y 'Precio' están en la fila 2 de la Excel
+                df_raw = pd.read_csv(URL_PROVEEDOR_CSV, header=1)
+                df_raw = df_raw.dropna(axis=1, how='all').dropna(axis=0, how='all')
+                df_raw.columns = df_raw.columns.str.strip()
+                st.session_state.df_proveedor = df_raw
+
+            df = st.session_state.df_proveedor
+            col_p, col_c = st.columns([2, 1])
+            
+            with col_p:
+                p_sel = st.selectbox("Seleccionar Producto", df['Productos'].dropna().unique())
+            with col_c:
+                cant = st.number_input("Cantidad", min_value=0.1, value=1.0, step=0.1)
+            
+            if st.button("Agregar al Carrito", use_container_width=True):
+                precio_unit = df[df['Productos'] == p_sel]['Precio'].values[0]
+                st.session_state.carrito.append({
+                    'nombre': p_sel, 'cantidad': cant, 
+                    'precio': float(precio_unit), 'subtotal': float(precio_unit) * cant
+                })
+
+            if st.session_state.carrito:
+                st.divider()
+                st.table(pd.DataFrame(st.session_state.carrito))
+                total_v = sum(i['subtotal'] for i in st.session_state.carrito)
+                st.markdown(f"## Total: ${total_v:,.2f}")
+                
+                c1, c2 = st.columns(2)
+                with c1:
+                    metodo = st.selectbox("Método de Pago", ["Efectivo", "Transferencia", "Fiado"])
+                with c2:
+                    cli_id = None
+                    if metodo == "Fiado":
+                        clis = db.collection("usuarios").where("id_negocio", "==", neg_id).where("rol", "==", "cliente").stream()
+                        dict_clis = {c.to_dict()['nombre']: c.id for c in clis}
+                        nom_cli = st.selectbox("Seleccionar Cliente", list(dict_clis.keys()))
+                        cli_id = dict_clis[nom_cli]
+                
+                if st.button("✅ Confirmar y Guardar Venta", use_container_width=True, type="primary"):
+                    db.collection("ventas_procesadas").add({
+                        'id_negocio': neg_id, 'items': st.session_state.carrito, 'total': total_v,
+                        'metodo': metodo, 'cliente_id': cli_id, 'vendedor': nom_u,
+                        'fecha_completa': ahora_ar, 'fecha_str': ahora_ar.strftime("%d/%m/%Y"), 'hora_str': ahora_ar.strftime("%H:%M")
+                    })
+                    st.session_state.carrito = []
+                    st.success("¡Venta registrada con éxito!")
+                    st.rerun()
+
+        with tabs[1]: # GASTOS
+            st.subheader("📉 Registro de Gastos")
+            with st.container(border=True):
+                desc_g = st.text_input("Concepto del Gasto")
+                monto_g = st.number_input("Monto $", min_value=0.0, step=100.0)
+                if st.button("Registrar Gasto", use_container_width=True):
+                    db.collection("gastos").add({
+                        'id_negocio': neg_id, 'descripcion': desc_g, 'monto': monto_g,
+                        'fecha_completa': ahora_ar, 'fecha_str': ahora_ar.strftime("%d/%m/%Y")
+                    })
+                    st.success("Gasto guardado")
+
+        with tabs[2]: # HISTORIAL
+            st.subheader("📜 Historial de Ventas")
+            h_ventas = db.collection("ventas_procesadas").where("id_negocio", "==", neg_id).order_by("fecha_completa", direction="DESCENDING").limit(20).stream()
+            lista_h = [{"Fecha": v.to_dict().get('fecha_str'), "Hora": v.to_dict().get('hora_str'), "Método": v.to_dict().get('metodo'), "Total": f"${v.to_dict().get('total'):,.2f}"} for v in h_ventas]
+            if lista_h: st.table(pd.DataFrame(lista_h))
+            else: st.info("No hay ventas registradas recientemente.")
+
+        with tabs[3]: # CLIENTES
+            st.subheader("👥 Gestión de Clientes")
+            with st.container(border=True):
+                c1, c2, c3 = st.columns(3)
+                with c1: nc_nom = st.text_input("Nombre y Apellido Cliente")
+                with c2: nc_dni = st.text_input("DNI (Contraseña)")
+                with c3: nc_f = st.text_input("Fecha de Pago (DD/MM)")
+                if st.button("Registrar Nuevo Cliente", use_container_width=True):
+                    db.collection("usuarios").add({
+                        'id_negocio': neg_id, 'nombre': nc_nom, 'password': nc_dni, 
+                        'rol': 'cliente', 'promesa_pago': nc_f
+                    })
+                    st.success(f"Cliente {nc_nom} creado.")
+
     # --- VISTA CLIENTE ---
-    if rol_u == "cliente":
+    elif rol_u == "cliente":
         c_id = st.session_state.usuario
         v_f = list(db.collection("ventas_procesadas").where("cliente_id", "==", c_id).where("metodo", "==", "Fiado").stream())
         p_f = list(db.collection("pagos_clientes").where("cliente_id", "==", c_id).stream())
@@ -122,8 +205,6 @@ else:
             Usted se ha comprometido a cancelar el total de su deuda el día **{f_pago}**. 
             *   **Si cumple con el pago total:** Se le mantienen los precios originales de compra.
             *   **Si no cumple o deja saldo:** Los valores de los productos se actualizarán automáticamente según el precio de venta actual en el local.
-            
-            **Por favor, para mantener este beneficio, no deje saldo pendiente.**
             """)
 
         st.subheader("📜 Detalle de Movimientos")
@@ -143,90 +224,3 @@ else:
                 else:
                     st.markdown(f"### ✅ Pago Recibido: {d.get('fecha_str')} - {d.get('hora_str')}hs")
                     st.markdown(f"<h2 style='color:green;'>+ ${d.get('monto', 0):,.2f}</h2>", unsafe_allow_html=True)
-
-    # --- VISTA DUEÑO ---
-    elif rol_u == "negocio":
-        tabs = st.tabs(["🛒 Ventas", "📉 Gastos", "📜 Historial", "👥 Clientes"])
-        
-        with tabs[0]: # VENTAS
-            if st.session_state.df_proveedor is None:
-                try:
-                    # Leemos desde la fila 2 para saltar encabezados de fantasía
-                    df_raw = pd.read_csv(URL_PROVEEDOR_CSV, header=1)
-                    # Eliminamos columnas y filas que sean todo NaN (vacías)
-                    df_raw = df_raw.dropna(axis=1, how='all').dropna(axis=0, how='all')
-                    # Limpiamos nombres de columnas por si tienen espacios
-                    df_raw.columns = df_raw.columns.str.strip()
-                    st.session_state.df_proveedor = df_raw
-                except:
-                    st.error("Error al leer la Hoja 1.")
-
-            df = st.session_state.df_proveedor
-            if df is not None:
-                # Usamos los nombres que me diste: Productos y Precio
-                # Si fallan, usamos la posición (0 para Productos, 2 para Precio)
-                c_prod = 'Productos' if 'Productos' in df.columns else df.columns[0]
-                c_pre = 'Precio' if 'Precio' in df.columns else df.columns[2]
-
-                st.subheader("Nueva Venta")
-                p_sel = st.selectbox("Seleccionar Producto", df[c_prod].dropna().unique())
-                cant = st.number_input("Cantidad", min_value=0.1, value=1.0)
-                
-                if st.button("Añadir al Carrito"):
-                    val_pre = df[df[c_prod] == p_sel][c_pre].values[0]
-                    st.session_state.carrito.append({
-                        'nombre': p_sel, 'cantidad': cant, 'precio': float(val_pre), 'subtotal': float(val_pre) * cant
-                    })
-                
-                if st.session_state.carrito:
-                    st.table(pd.DataFrame(st.session_state.carrito))
-                    total_v = sum(i['subtotal'] for i in st.session_state.carrito)
-                    st.write(f"### Total: ${total_v:,.2f}")
-                    
-                    metodo = st.selectbox("Método", ["Efectivo", "Transferencia", "Fiado"])
-                    cli_id = None
-                    if metodo == "Fiado":
-                        clis = db.collection("usuarios").where("id_negocio", "==", neg_id).where("rol", "==", "cliente").stream()
-                        dict_clis = {c.to_dict()['nombre']: c.id for c in clis}
-                        nom_cli = st.selectbox("Cliente", list(dict_clis.keys()))
-                        cli_id = dict_clis[nom_cli]
-                    
-                    if st.button("Finalizar Venta"):
-                        ahora = obtener_hora_argentina()
-                        db.collection("ventas_procesadas").add({
-                            'id_negocio': neg_id, 'items': st.session_state.carrito, 'total': total_v,
-                            'metodo': metodo, 'cliente_id': cli_id, 'vendedor': nom_u,
-                            'fecha_completa': ahora, 'fecha_str': ahora.strftime("%d/%m/%Y"), 'hora_str': ahora.strftime("%H:%M")
-                        })
-                        st.session_state.carrito = []
-                        st.success("Venta Guardada")
-                        st.rerun()
-
-        with tabs[1]: # GASTOS
-            st.subheader("Gastos")
-            desc_g = st.text_input("Concepto")
-            monto_g = st.number_input("Monto", min_value=0.0)
-            if st.button("Registrar Gasto"):
-                ahora = obtener_hora_argentina()
-                db.collection("gastos").add({
-                    'id_negocio': neg_id, 'descripcion': desc_g, 'monto': monto_g,
-                    'fecha_completa': ahora, 'fecha_str': ahora.strftime("%d/%m/%Y")
-                })
-                st.success("Gasto registrado")
-
-        with tabs[2]: # HISTORIAL
-            st.subheader("Ventas")
-            h_ventas = db.collection("ventas_procesadas").where("id_negocio", "==", neg_id).stream()
-            lista_h = [{"Fecha": v.to_dict().get('fecha_str'), "Hora": v.to_dict().get('hora_str'), "Método": v.to_dict().get('metodo'), "Total": v.to_dict().get('total')} for v in h_ventas]
-            if lista_h: st.table(pd.DataFrame(lista_h))
-
-        with tabs[3]: # CLIENTES
-            st.subheader("Clientes")
-            nc_nom = st.text_input("Nombre y Apellido")
-            nc_dni = st.text_input("DNI")
-            nc_f = st.text_input("Fecha Pago")
-            if st.button("Guardar Cliente"):
-                db.collection("usuarios").add({
-                    'id_negocio': neg_id, 'nombre': nc_nom, 'password': nc_dni, 'rol': 'cliente', 'promesa_pago': nc_f
-                })
-                st.success("Cliente creado!")
