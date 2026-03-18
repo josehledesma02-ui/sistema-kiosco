@@ -1,60 +1,28 @@
 import streamlit as st
 import pandas as pd
 
-# Configuración del Excel de Google
-ID_HOJA = "1-ay_xIqYItwOaXe80VUsEmh4gsANrk9PH72aZcUD54g"
-URL_CSV = f"https://docs.google.com/spreadsheets/d/{ID_HOJA}/export?format=csv"
-
-def renderizar(db, id_negocio, ahora_ar, nombre_u):
-    st.subheader("🛒 Nueva Venta")
-
-    # 1. Cargar Inventario
+def cargar_productos(db, id_negocio):
     try:
-        df = pd.read_csv(URL_CSV)
-        # Limpieza básica de columnas
-        df.columns = [str(c).strip().lower() for c in df.columns]
-        col_prod = next(c for c in df.columns if "producto" in c)
-        col_prec = next(c for c in df.columns if "precio" in c)
-        df_inv = df[[col_prod, col_prec]].rename(columns={col_prod: "item", col_prec: "precio"})
-    except:
-        st.error("Error cargando lista de precios.")
-        return
+        # 1. Intentamos traer la colección de productos de este negocio
+        productos_ref = db.collection("productos").where("id_negocio", "==", id_negocio).stream()
+        lista_prod = [p.to_dict() for p in productos_ref]
 
-    # 2. Buscador y Selección
-    busqueda = st.text_input("🔍 Buscar producto...", "").lower()
-    filtro = df_inv[df_inv['item'].astype(str).str.contains(busqueda, case=False)] if busqueda else df_inv
-    
-    col_a, col_b, col_c = st.columns([2, 1, 1])
-    with col_a:
-        seleccionado = st.selectbox("Producto", filtro['item'].unique())
-    with col_b:
-        cantidad = st.number_input("Cant.", min_value=0.5, value=1.0, step=0.5)
-    
-    precio_sug = float(df_inv[df_inv['item'] == seleccionado]['precio'].values[0])
-    with col_c:
-        precio_v = st.number_input("Precio $", value=precio_sug)
+        if not lista_prod:
+            # Si la lista está vacía, devolvemos un DataFrame de ejemplo para que no explote
+            st.warning("⚠️ No se encontraron productos en la base de datos.")
+            return pd.DataFrame(columns=["nombre", "precio", "categoria", "stock"])
 
-    if st.button("➕ Agregar"):
-        st.session_state.carrito.append({
-            'nombre': seleccionado, 'cantidad': cantidad, 
-            'precio': precio_v, 'subtotal': precio_v * cantidad
-        })
-        st.toast("Añadido")
-
-    # 3. Carrito y Finalización
-    if st.session_state.carrito:
-        st.table(pd.DataFrame(st.session_state.carrito))
-        total = sum(i['subtotal'] for i in st.session_state.carrito)
-        st.write(f"### Total: ${total:,.2f}")
+        df = pd.DataFrame(lista_prod)
         
-        metodo = st.radio("Pago:", ["Efectivo", "Fiado"], horizontal=True)
-        
-        if st.button("🚀 Confirmar Venta", type="primary"):
-            db.collection("ventas_procesadas").add({
-                'id_negocio': id_negocio, 'items': st.session_state.carrito,
-                'total': total, 'metodo': metodo, 'vendedor': nombre_u,
-                'fecha_completa': ahora_ar, 'fecha_str': ahora_ar.strftime("%d/%m/%Y")
-            })
-            st.session_state.carrito = []
-            st.success("Venta realizada")
-            st.rerun()
+        # 2. Limpieza de seguridad: Aseguramos que 'precio' sea número
+        if 'precio' in df.columns:
+            df['precio'] = pd.to_numeric(df['precio'], errors='coerce').fillna(0)
+        else:
+            df['precio'] = 0
+            
+        return df
+
+    except Exception as e:
+        st.error(f"❌ Error crítico al conectar con la lista de precios: {e}")
+        # Devolvemos un DataFrame vacío para que el resto del código no de KeyError
+        return pd.DataFrame(columns=["nombre", "precio", "categoria", "stock"])
