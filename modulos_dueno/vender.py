@@ -3,12 +3,29 @@ import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 
 def renderizar(db, id_negocio, ahora_ar, nombre_u):
-    # Estilo personalizado para agrandar la letra de las tablas y textos
+    # Estilo personalizado mejorado
     st.markdown("""
         <style>
+            /* Agrandar letra de tablas y textos generales */
             .stTable td, .stTable th { font-size: 18px !important; }
             .big-font { font-size: 20px !important; font-weight: bold; }
             .total-font { font-size: 30px !important; color: #1E88E5; font-weight: bold; }
+            
+            /* Estilo para la X roja de eliminar (sin recuadro) */
+            .btn-eliminar {
+                color: #FF1744; /* Rojo brillante */
+                font-size: 22px;
+                font-weight: bold;
+                text-decoration: none; /* Sin subrayado */
+                cursor: pointer;
+                border: none;
+                background: none;
+                padding: 0;
+                margin-left: 10px;
+            }
+            .btn-eliminar:hover {
+                color: #B71C1C; /* Rojo más oscuro al pasar el mouse */
+            }
         </style>
     """, unsafe_allow_html=True)
 
@@ -38,6 +55,14 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
     if 'carrito' not in st.session_state:
         st.session_state.carrito = []
 
+    # Manejo de eliminación (fuera del bucle de renderizado para evitar errores)
+    if 'eliminar_indice' in st.session_state and st.session_state.eliminar_indice is not None:
+        idx_a_borrar = st.session_state.eliminar_indice
+        if 0 <= idx_a_borrar < len(st.session_state.carrito):
+            st.session_state.carrito.pop(idx_a_borrar)
+        st.session_state.eliminar_indice = None # Limpiar orden de eliminación
+        st.rerun()
+
     with col_izq:
         st.subheader("🔍 Buscador")
         lista_nombres = df_p['PRODUCTOS'].tolist()
@@ -62,9 +87,10 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
         st.divider()
         st.subheader("📋 Detalle de la compra")
         if st.session_state.carrito:
-            # Mostramos cada ítem con opciones de edición
+            # Mostramos cada ítem con opciones de edición y eliminación limpia
             for i, item in enumerate(st.session_state.carrito):
-                c1, c2, c3, c4 = st.columns([3, 1, 1.5, 0.5])
+                # Reajustamos columnas para dar espacio a la X
+                c1, c2, c3, c4 = st.columns([3, 1, 1.5, 0.3]) 
                 with c1:
                     st.markdown(f"**{item['nombre']}**")
                 with c2:
@@ -75,13 +101,36 @@ def renderizar(db, id_negocio, ahora_ar, nombre_u):
                         st.rerun()
                 with c3:
                     sub_f = f"${item['subtotal']:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
-                    st.markdown(f"<p style='text-align:right'>{sub_f}</p>", unsafe_allow_html=True)
+                    st.markdown(f"<p style='text-align:right; font-size:18px;'>{sub_f}</p>", unsafe_allow_html=True)
                 with c4:
-                    if st.button("❌", key=f"del_{i}"):
-                        st.session_state.carrito.pop(i)
-                        st.rerun()
+                    # USAMOS UN BOTÓN INVISIBLE CON HTML PARA LA X ROJA LIMPIA
+                    # Al hacer clic, guardamos el índice en session_state para borrarlo arriba
+                    if st.button("X", key=f"del_btn_{i}", help="Eliminar producto"):
+                         st.session_state.eliminar_indice = i
+                         st.rerun()
+                         
+                    # Aplicamos estilo CSS a la X del botón generado por Streamlit (hack visual)
+                    st.markdown(f"""
+                        <style>
+                            div[data-testid="stButton"] > button[key="del_btn_{i}"] {{
+                                background: none !important;
+                                border: none !important;
+                                color: #FF1744 !important; /* Rojo */
+                                font-size: 22px !important;
+                                font-weight: bold !important;
+                                padding: 0 !important;
+                                margin: 0 !important;
+                                box-shadow: none !important;
+                            }}
+                            div[data-testid="stButton"] > button[key="del_btn_{i}"]:hover {{
+                                color: #B71C1C !important; /* Rojo oscuro */
+                                background: none !important;
+                            }}
+                        </style>
+                    """, unsafe_allow_html=True)
             
-            if st.button("🗑️ Vaciar Carrito Completo"):
+            st.divider()
+            if st.button("🗑️ Vaciar Carrito Completo", use_container_width=True):
                 st.session_state.carrito = []
                 st.rerun()
         else:
